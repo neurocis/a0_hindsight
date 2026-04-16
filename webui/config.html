@@ -1,176 +1,36 @@
 <html>
 <head>
-    <title>Hindsight Memory</title>
+    <title>Hindsight Memory Configuration</title>
 </head>
 
 <body>
     <div x-data>
         <template x-if="config">
             <div>
-                <div class="section-title">Hindsight Memory</div>
+                <div class="section-title">Hindsight Server Configuration</div>
                 <div class="section-description">
-                    Augments Agent Zero's memory with
-                    <a href="https://github.com/vectorize-io/hindsight" target="_blank">Hindsight</a>
-                    by Vectorize.io. Retains, recalls, and reflects on memories
-                    using semantic search and disposition-aware context.
+                    Configure the connection to your Hindsight memory server.
                 </div>
 
                 <div class="field">
                     <div class="field-label">
-                        <div class="field-title">Bank ID Prefix</div>
+                        <div class="field-title">Hindsight Base URL</div>
                         <div class="field-description">
-                            Prefix for Hindsight memory bank IDs.
-                            Combined with project name for isolation.
+                            The URL where your Hindsight server is running (optional).
+                            Example: <code>http://localhost:8888</code> or <code>http://192.168.1.100:8888</code>
                         </div>
                     </div>
                     <div class="field-control">
                         <input type="text"
-                               x-model="config.hindsight_bank_prefix"
-                               placeholder="a0" />
-                    </div>
-                </div>
-
-                <div class="field">
-                    <div class="field-label">
-                        <div class="field-title">Enable Retain</div>
-                        <div class="field-description">
-                            Store conversation memories to Hindsight after each interaction.
-                        </div>
-                    </div>
-                    <div class="field-control">
-                        <label class="toggle">
-                            <input type="checkbox"
-                                   x-model="config.hindsight_retain_enabled" />
-                            <span class="toggler"></span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="field">
-                    <div class="field-label">
-                        <div class="field-title">Enable Recall</div>
-                        <div class="field-description">
-                            Enrich memory recall with Hindsight semantic search results.
-                        </div>
-                    </div>
-                    <div class="field-control">
-                        <label class="toggle">
-                            <input type="checkbox"
-                                   x-model="config.hindsight_recall_enabled" />
-                            <span class="toggler"></span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="field">
-                    <div class="field-label">
-                        <div class="field-title">Enable Reflect</div>
-                        <div class="field-description">
-                            Inject disposition-aware context from Hindsight into the system prompt.
-                        </div>
-                    </div>
-                    <div class="field-control">
-                        <label class="toggle">
-                            <input type="checkbox"
-                                   x-model="config.hindsight_reflect_enabled" />
-                            <span class="toggler"></span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="field">
-                    <div class="field-label">
-                        <div class="field-title">Recall Max Tokens</div>
-                        <div class="field-description">
-                            Maximum tokens returned by Hindsight recall.
-                        </div>
-                    </div>
-                    <div class="field-control">
-                        <input type="number"
-                               x-model.number="config.hindsight_recall_max_tokens"
-                               placeholder="4096" />
-                    </div>
-                </div>
-
-                <div class="field">
-                    <div class="field-label">
-                        <div class="field-title">Recall Budget</div>
-                        <div class="field-description">
-                            Compute budget for recall: low, mid, or high.
-                        </div>
-                    </div>
-                    <div class="field-control">
-                        <select x-model="config.hindsight_recall_budget">
-                            <option value="low">Low</option>
-                            <option value="mid">Mid</option>
-                            <option value="high">High</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="field">
-                    <div class="field-label">
-                        <div class="field-title">Reflect Budget</div>
-                        <div class="field-description">
-                            Compute budget for reflect: low, mid, or high.
-                        </div>
-                    </div>
-                    <div class="field-control">
-                        <select x-model="config.hindsight_reflect_budget">
-                            <option value="low">Low</option>
-                            <option value="mid">Mid</option>
-                            <option value="high">High</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="field">
-                    <div class="field-label">
-                        <div class="field-title">Reflect Max Tokens</div>
-                        <div class="field-description">
-                            Maximum tokens for the injected reflect context.
-                        </div>
-                    </div>
-                    <div class="field-control">
-                        <input type="number"
-                               x-model.number="config.hindsight_reflect_max_tokens"
-                               placeholder="500" />
-                    </div>
-                </div>
-
-                <div class="field">
-                    <div class="field-label">
-                        <div class="field-title">Context Cache TTL (seconds)</div>
-                        <div class="field-description">
-                            How long to cache Hindsight reflect context before refreshing.
-                        </div>
-                    </div>
-                    <div class="field-control">
-                        <input type="number"
-                               x-model.number="config.hindsight_cache_ttl"
-                               placeholder="120" />
-                    </div>
-                </div>
-
-                <div class="field">
-                    <div class="field-label">
-                        <div class="field-title">Debug Logging</div>
-                        <div class="field-description">
-                            Enable verbose logging for troubleshooting.
-                        </div>
-                    </div>
-                    <div class="field-control">
-                        <label class="toggle">
-                            <input type="checkbox"
-                                   x-model="config.hindsight_debug" />
-                            <span class="toggler"></span>
-                        </label>
+                               x-model="config.hindsight_base_url"
+                               placeholder="http://localhost:8888" />
                     </div>
                 </div>
 
                 <div class="section-description" style="margin-top: 1rem; opacity: 0.7;">
-                    <strong>Note:</strong> <code>Hindsight Base URL</code> is configured above in this settings panel (optional).
-                    <code>HINDSIGHT_API_KEY</code> is optional for local servers and can be set in <strong>Settings → Secrets</strong> if needed.
+                    <strong>Note:</strong> If left blank, the plugin will attempt to use <code>HINDSIGHT_BASE_URL</code> from 
+                    <strong>Settings → Secrets</strong> for backwards compatibility. 
+                    <code>HINDSIGHT_API_KEY</code> (optional) can be set in Secrets if your server requires authentication.
                 </div>
             </div>
         </template>
