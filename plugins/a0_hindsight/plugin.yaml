@@ -1,7 +1,7 @@
 name: a0_hindsight
 title: Hindsight Memory
 description: Augments Agent Zero's memory with Hindsight semantic search and disposition-aware context generation.
-version: 1.1.0
+version: 1.2.0
 settings_sections:
   - agent
 per_project_config: false
