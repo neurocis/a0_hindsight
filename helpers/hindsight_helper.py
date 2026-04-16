@@ -8,8 +8,8 @@ Uses async variants (aretain, arecall, areflect) since Agent Zero
 extensions run inside an async event loop.
 """
 
+import os
 import time
-from typing import Optional, Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from agent import AgentContext
@@ -27,7 +27,6 @@ _reflect_cache: Dict[str, tuple] = {}  # bank_id -> (timestamp, content)
 
 # Default configuration values
 _DEFAULTS: Dict[str, Any] = {
-    "hindsight_base_url": "",  # Read from plugin config, fallback to secrets
     "hindsight_bank_prefix": "a0",
     "hindsight_retain_enabled": True,
     "hindsight_recall_enabled": True,
@@ -79,19 +78,11 @@ def _get_secret(key: str, default: str = "", context: Optional["AgentContext"] =
 
 
 def get_base_url(context: Optional["AgentContext"] = None) -> Optional[str]:
-    """Retrieve HINDSIGHT_BASE_URL from plugin config or A0 secrets.
+    """Retrieve HINDSIGHT_BASE_URL from environment variable.
     
-    Checks plugin config first (preferred), falls back to secrets for backwards compatibility.
+    Reads from os.environ.get("HINDSIGHT_BASE_URL") for non-sensitive configuration.
     """
-    # Try plugin config first (preferred)
-    agent0 = getattr(context, "agent0", None) if context else None
-    config = _get_plugin_config(agent0) if agent0 else {}
-    url = config.get("hindsight_base_url", "").strip()
-    
-    # Fall back to secrets for backwards compatibility
-    if not url:
-        url = _get_secret("HINDSIGHT_BASE_URL", "", context)
-    
+    url = os.environ.get("HINDSIGHT_BASE_URL", "").strip()
     return url if url else None
 
 

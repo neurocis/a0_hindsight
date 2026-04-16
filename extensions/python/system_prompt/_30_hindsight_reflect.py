@@ -9,7 +9,7 @@ from agent import AgentContext
 from helpers.extension import Extension
 from helpers import errors
 
-from usr.plugins.hindsight.helpers import hindsight_helper
+from usr.plugins.a0_hindsight.helpers import hindsight_helper
 
 
 REFLECT_TIMEOUT = 15

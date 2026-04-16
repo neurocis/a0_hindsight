@@ -12,7 +12,7 @@ from helpers.dirty_json import DirtyJson
 from agent import LoopData
 from helpers.defer import DeferredTask, THREAD_BACKGROUND
 
-from usr.plugins.hindsight.helpers import hindsight_helper
+from usr.plugins.a0_hindsight.helpers import hindsight_helper
 
 
 class HindsightRetain(Extension):

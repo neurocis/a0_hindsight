@@ -5,7 +5,7 @@ Initializes the Hindsight client when agent starts a monologue.
 
 from agent import AgentContext
 from helpers.extension import Extension
-from usr.plugins.hindsight.helpers import hindsight_helper
+from usr.plugins.a0_hindsight.helpers import hindsight_helper
 
 
 class HindsightInit(Extension):

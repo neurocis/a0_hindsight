@@ -11,7 +11,7 @@ from helpers.extension import Extension
 from agent import LoopData
 from helpers import errors, plugins
 
-from usr.plugins.hindsight.helpers import hindsight_helper
+from usr.plugins.a0_hindsight.helpers import hindsight_helper
 
 
 SEARCH_TIMEOUT = 30
