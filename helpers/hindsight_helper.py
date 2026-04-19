@@ -55,7 +55,7 @@ def _get_plugin_config(agent: Any) -> Dict[str, Any]:
     """Read plugin settings from A0's config system with fallbacks."""
     try:
         from helpers.plugins import get_plugin_config
-        config = get_plugin_config("hindsight", agent=agent) or {}
+        config = get_plugin_config("a0_hindsight", agent=agent) or {}
     except Exception:
         config = {}
 
@@ -113,7 +113,8 @@ def is_configured(context: Optional["AgentContext"] = None) -> bool:
     """Check if Hindsight SDK is available and base URL is set."""
     if not HINDSIGHT_AVAILABLE:
         return False
-    return bool(get_base_url(context))
+    agent = getattr(context, "agent0", None) if context else None
+    return bool(get_base_url(context, agent))
 
 
 def get_client(context: Optional["AgentContext"] = None) -> Optional[Any]:
@@ -149,9 +150,17 @@ def get_bank_id(context: "AgentContext") -> str:
 
     Uses the bank prefix + project name (if active) for memory isolation.
     Falls back to prefix + 'default' if no project is active.
+    
+    NEW: if hindsight_bank_id is explicitly set in config, use that instead.
     """
     agent0 = getattr(context, "agent0", None)
     config = _get_plugin_config(agent0) if agent0 else {}
+    
+    # Explicit override takes priority
+    explicit_id = config.get("hindsight_bank_id", "").strip()
+    if explicit_id:
+        return explicit_id
+    
     prefix = config.get("hindsight_bank_prefix", "a0")
 
     # Try to get project name for isolation
