@@ -96,7 +96,6 @@ def get_base_url(context: Optional["AgentContext"] = None, agent: Any = None) ->
         config = _get_plugin_config(agent)
         url = config.get("hindsight_base_url", "").strip()
         if url:
-            _log(context, "Using HINDSIGHT_BASE_URL from plugin config (legacy). Consider using environment variable instead.", "warning")
             return url
     except Exception as e:
         _log(context, f"Error reading plugin config: {e}", "debug")
@@ -226,8 +225,12 @@ async def recall_memories(context: "AgentContext", query: str) -> Optional[str]:
         return None
 
     bank_id = get_bank_id(context)
-
     try:
+        # Validate query before sending
+        if not query or not query.strip():
+            _log(context, "Recall query is empty after validation", "debug")
+            return None
+        
         result = await client.arecall(
             bank_id=bank_id,
             query=query,
@@ -257,7 +260,12 @@ async def recall_memories(context: "AgentContext", query: str) -> Optional[str]:
             return result_str if result_str and result_str != "None" else None
 
     except Exception as e:
-        _log(context, f"Recall error: {e}", "error")
+        error_msg = str(e)
+        # Log more detailed error info for debugging
+        if "400" in error_msg or "Bad Request" in error_msg:
+            _log(context, f"Recall 400 Bad Request: {error_msg[:200]}. Query length: {len(query) if query else 0}. Bank: {bank_id}", "warning")
+        else:
+            _log(context, f"Recall error: {error_msg}", "error")
         return None
 
 

@@ -50,24 +50,24 @@ class HindsightRecall(Extension):
         try:
             # Build query from user message and recent history
             user_instruction = (
-                loop_data.user_message.output_text() if loop_data.user_message else "None"
+                loop_data.user_message.output_text() if loop_data.user_message else ""
             )
             history_len = core_config.get("memory_recall_history_len", 10000)
-            history = self.agent.history.output_text()[-history_len:]
-            query = f"{user_instruction}\n\n{history}"
-
+            history = self.agent.history.output_text()[-history_len:] if self.agent.history else ""
+            
+            # Build query: prioritize user instruction, fallback to history, ensure non-empty
+            query = user_instruction.strip() if user_instruction else ""
+            if not query and history:
+                query = history.strip()
+            
             # Truncate query to reasonable size for Hindsight
-            query = query[:4000]
-
-            if not query or len(query.strip()) <= 3:
-                log_item.update(heading="No query for Hindsight recall")
+            if query:
+                query = query[:4000]
+            
+            # Validate query is not empty or too short
+            if not query or len(query.strip()) < 3:
+                log_item.update(heading="Insufficient query for Hindsight recall (need at least 3 chars)")
                 return
-
-            # Run recall with timeout
-            recall_result = await asyncio.wait_for(
-                hindsight_helper.recall_memories(context, query),
-                timeout=SEARCH_TIMEOUT,
-            )
 
             if recall_result and recall_result.strip():
                 log_item.update(
