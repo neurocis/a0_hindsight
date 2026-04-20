@@ -99,6 +99,57 @@ def _get_plugin_config(agent: Any) -> Dict[str, Any]:
     return config
 
 
+def is_hindsight_client_available() -> bool:
+    """Runtime check for hindsight_client availability.
+    
+    Fast path: reads .dependency_status.json file created by hooks.py install().
+    Slow path: performs live import check if status file missing (self-healing).
+    
+    Returns True if hindsight_client is available, False otherwise.
+    """
+    import os
+    import json
+    
+    plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    status_file = os.path.join(plugin_dir, ".dependency_status.json")
+    
+    # Fast path: check cached status file from installation
+    if os.path.isfile(status_file):
+        try:
+            with open(status_file, "r") as f:
+                status = json.load(f)
+                if status.get("hindsight_client"):
+                    return True
+        except Exception:
+            pass
+    
+    # Slow path: live check (status file missing or invalid)
+    available = HINDSIGHT_AVAILABLE
+    
+    if available:
+        # Self-heal: create the status file so future checks are instant
+        try:
+            status_data = {
+                "checked_at": _get_timestamp(),
+                "hindsight_client": True,
+                "warnings": ["auto-created by lazy init (hooks.install was not run)"],
+                "errors": [],
+            }
+            os.makedirs(plugin_dir, exist_ok=True)
+            with open(status_file, "w") as f:
+                json.dump(status_data, f, indent=2)
+        except Exception:
+            pass  # Status file creation failed, but hindsight_client is available
+    
+    return available
+
+
+def _get_timestamp() -> str:
+    """Return current timestamp in ISO format."""
+    from datetime import datetime
+    return datetime.now().isoformat()
+
+
 def _get_secret(key: str, default: str = "", context: Optional["AgentContext"] = None) -> str:
     """Retrieve a secret value from A0 secrets manager."""
     try:

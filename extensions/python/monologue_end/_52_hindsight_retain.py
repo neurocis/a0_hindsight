@@ -25,6 +25,9 @@ class HindsightRetain(Extension):
         context = self.agent.context
         if not hasattr(context, "agent0"):
             return
+        # Check if hindsight_client is available before proceeding
+        if not hindsight_helper.is_hindsight_client_available():
+            return
 
         if not hindsight_helper.is_configured(context):
             return
