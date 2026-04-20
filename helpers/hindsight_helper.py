@@ -22,16 +22,35 @@ except ImportError:
     # pip install the dependency so extensions don't silently fail.
     import subprocess
     import sys
+    import logging as _logging
+    _logger = _logging.getLogger(__name__)
+    _logger.warning(
+        "[Hindsight] hindsight_client not available — attempting auto-install..."
+    )
     try:
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "hindsight-client>=0.4.0"],
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--quiet", "hindsight-client>=0.4.0"],
             capture_output=True,
             text=True,
             check=True,
+            timeout=30,
         )
+        # Re-import after installation
         from hindsight_client import Hindsight
         HINDSIGHT_AVAILABLE = True
-    except Exception:
+        _logger.info("[Hindsight] hindsight_client auto-installed and loaded successfully.")
+    except subprocess.TimeoutExpired:
+        _logger.error("[Hindsight] Auto-install timed out (>30s)")
+        HINDSIGHT_AVAILABLE = False
+        Hindsight = None  # type: ignore[assignment,misc]
+    except subprocess.CalledProcessError as _e:
+        _logger.error(f"[Hindsight] Auto-install failed: pip returned {_e.returncode}")
+        if _e.stderr:
+            _logger.error(f"[Hindsight] pip stderr: {_e.stderr}")
+        HINDSIGHT_AVAILABLE = False
+        Hindsight = None  # type: ignore[assignment,misc]
+    except Exception as _e:
+        _logger.error(f"[Hindsight] Auto-install error: {_e}")
         HINDSIGHT_AVAILABLE = False
         Hindsight = None  # type: ignore[assignment,misc]
 
