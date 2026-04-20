@@ -330,9 +330,11 @@ def get_bank_id(context: "AgentContext") -> str:
     """Derive a Hindsight bank ID from the agent context.
 
     Uses the bank prefix + project name (if active) for memory isolation.
-    Falls back to prefix + 'default' if no project is active.
+    Always uses the actual project name when a project is active,
+    even if the project has no per-project settings defined.
+    Only falls back to prefix + 'default' when no project is active at all.
     
-    NEW: if hindsight_bank_id is explicitly set in config, use that instead.
+    If hindsight_bank_id is explicitly set in config, that takes priority.
     """
     agent0 = getattr(context, "agent0", None)
     config = _get_plugin_config(agent0)
@@ -344,13 +346,23 @@ def get_bank_id(context: "AgentContext") -> str:
     
     prefix = config.get("hindsight_bank_prefix", "a0")
 
-    # Try to get project name for isolation
+    # Resolve project name using the framework's context data.
+    # This always returns the active project name when one is active,
+    # even if the project has no per-project plugin settings defined.
     project_name = None
     try:
-        if hasattr(context, "project") and context.project:
-            project_name = getattr(context.project, "name", None)
+        from helpers.projects import get_context_project_name
+        project_name = get_context_project_name(context)
     except Exception:
         pass
+
+    # Fallback: try context.project.name (less reliable)
+    if not project_name:
+        try:
+            if hasattr(context, "project") and context.project:
+                project_name = getattr(context.project, "name", None)
+        except Exception:
+            pass
 
     if project_name:
         return f"{prefix}-{project_name}"
