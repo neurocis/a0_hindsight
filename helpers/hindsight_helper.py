@@ -94,13 +94,23 @@ def _log(context: Optional["AgentContext"], msg: str, log_type: str = "info") ->
         print(f"[Hindsight] {msg}")
 
 
+# Settings that are GLOBAL (shared across all projects)
+_GLOBAL_SETTINGS = {"hindsight_base_url", "hindsight_bank_prefix"}
+
+
 def _get_plugin_config(agent: Any) -> Dict[str, Any]:
-    """Read plugin settings from A0's config system with fallbacks.
+    """Read plugin settings with global/per-project merge.
+    
+    Global settings (hindsight_base_url, hindsight_bank_prefix) are always
+    read from the global (no-project) scope, then per-project settings are
+    layered on top. This ensures server connection info is shared while
+    feature toggles and operational settings can vary per project.
     
     Priority:
     1. A0 framework get_plugin_config() (resolves project/agent scope)
-    2. Direct config.json file read (Docker-safe fallback when agent=None or framework unavailable)
-    3. _DEFAULTS only
+    2. Global config for global-only settings (base_url, bank_prefix)
+    3. Direct config.json file read (Docker-safe fallback)
+    4. _DEFAULTS only
     """
     config = {}
     
@@ -108,7 +118,15 @@ def _get_plugin_config(agent: Any) -> Dict[str, Any]:
     if agent is not None:
         try:
             from helpers.plugins import get_plugin_config
+            # Read project-scoped config (all settings for this project)
             config = get_plugin_config("a0_hindsight", agent=agent) or {}
+            
+            # Always force global settings from global scope
+            # (base_url and bank_prefix must not vary per project)
+            global_config = get_plugin_config("a0_hindsight", agent=agent, project_name="") or {}
+            for key in _GLOBAL_SETTINGS:
+                if key in global_config:
+                    config[key] = global_config[key]
         except Exception as e:
             import traceback
             print(f"[HINDSIGHT DEBUG] _get_plugin_config() framework API failed: {type(e).__name__}: {e}")

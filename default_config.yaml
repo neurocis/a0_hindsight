@@ -1,12 +1,34 @@
 # Hindsight plugin configuration defaults
-# Connection settings are stored in secrets (HINDSIGHT_BASE_URL, HINDSIGHT_API_KEY)
+#
+# Settings are split into two categories:
+#
+# GLOBAL (shared across all projects):
+#   - hindsight_base_url: Hindsight server URL
+#   - hindsight_bank_prefix: Prefix combined with project name for bank isolation
+#   These are always read from the global (no-project) scope.
+#
+# PER-PROJECT (can vary per project via the project selector):
+#   - hindsight_bank_id: Explicit bank ID override
+#   - hindsight_retain_enabled: Store conversation memories after each interaction
+#   - hindsight_recall_enabled: Enrich recall with semantic search
+#   - hindsight_reflect_enabled: Inject disposition-aware context
+#   - All other settings below
+#   Use the "Default" project for fallback values that apply when a
+#   project has no explicit override.
 
-# Bank ID settings
-# hindsight_bank_id - Explicit override for bank name (if set, takes priority over prefix-based derivation)
-# Leave blank/empty to use auto-derived ID format: prefix-projectname
+# ─── Global Settings ────────────────────────────────────────
+
+# Hindsight Base URL - the server endpoint
+# Also settable via HINDSIGHT_BASE_URL environment variable (takes priority)
+hindsight_base_url: ""
+
+# Bank ID prefix - combined with project name for isolation
+hindsight_bank_prefix: "a0"
+
+# ─── Per-Project Settings ───────────────────────────────────
+
+# Explicit bank ID override (leave blank for auto-derivation: prefix-projectname)
 hindsight_bank_id: ""
-
-# Bank ID prefix - combined with project/agent context for isolation (used when hindsight_bank_id is empty)
 
 # Enable/disable individual Hindsight operations
 hindsight_retain_enabled: true

@@ -7,6 +7,7 @@
     <div x-data>
         <template x-if="config">
             <div>
+                <!-- ===== GLOBAL SETTINGS ===== -->
                 <div class="section-title">Hindsight Server Configuration</div>
                 <div class="section-description">
                     Augments Agent Zero's memory with
@@ -15,41 +16,17 @@
                     using semantic search and disposition-aware context.
                 </div>
 
-                <div class="field">
-                    <div class="field-label">
-                        <div class="field-title">Bank ID Prefix</div>
-                        <div class="field-description">
-                            Prefix for Hindsight memory bank IDs.
-                            Combined with project name for isolation.
-                        </div>
-                    </div>
-                    <div class="field-control">
-                        <input type="text"
-                               x-model="config.hindsight_bank_prefix"
-                               placeholder="a0" />
-                    </div>
+                <div class="section-description" style="margin-bottom: 1rem; padding: 0.5rem; background: var(--bg-secondary, #1a1a2e); border-radius: 6px; border-left: 3px solid var(--accent, #6c63ff);">
+                    <strong>⚙️ Global Settings</strong> — These apply to all projects.
+                    Switch to <strong>Default</strong> or any project to configure per-project settings below.
                 </div>
-
-                <div class="field">
-                    <div class="field-label">
-                        <div class="field-title">Explicit Bank ID (Optional Override)</div>
-                        <div class="field-description">
-                            Leave blank to auto-derive bank ID from prefix + project name.
-                            Set to a specific name (e.g., "Agent0") to use that bank instead of derived format.
-                        </div>
-                    </div>
-                    <div class="field-control">
-                        <input type="text"
-                               x-model="config.hindsight_bank_id"
-                               placeholder="Leave blank for auto-derivation" />
-                    </div>
 
                 <div class="field">
                     <div class="field-label">
                         <div class="field-title">Hindsight Base URL</div>
                         <div class="field-description">
-                            The URL where your Hindsight server is running (optional).
-                            This setting is stored in the <code>HINDSIGHT_BASE_URL</code> environment variable.
+                            The URL where your Hindsight server is running.
+                            This setting is global — shared across all projects.
                             Example: <code>http://localhost:8888</code> or <code>http://192.168.1.100:8888</code>
                         </div>
                     </div>
@@ -60,10 +37,44 @@
                     </div>
                 </div>
 
-                <div class="section-description" style="margin-top: 1rem; opacity: 0.7;">
-                    <strong>Note:</strong> The Hindsight Base URL is stored in the <code>HINDSIGHT_BASE_URL</code> environment variable,
-                    not in the secrets manager.
-                    <code>HINDSIGHT_API_KEY</code> (optional) can be set in Secrets if your server requires authentication.
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Bank ID Prefix</div>
+                        <div class="field-description">
+                            Prefix for Hindsight memory bank IDs.
+                            Combined with project name for isolation.
+                            This setting is global — shared across all projects.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="text"
+                               x-model="config.hindsight_bank_prefix"
+                               placeholder="a0" />
+                    </div>
+                </div>
+
+                <!-- ===== PER-PROJECT SETTINGS ===== -->
+                <div style="margin-top: 1.5rem;"></div>
+
+                <div class="section-description" style="margin-bottom: 1rem; padding: 0.5rem; background: var(--bg-secondary, #1a1a2e); border-radius: 6px; border-left: 3px solid var(--success, #4caf50);">
+                    <strong>📁 Per-Project Settings</strong> — Use the project selector above to switch between
+                    <strong>Default</strong> (fallback for all projects) and individual project overrides.
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Explicit Bank ID Override</div>
+                        <div class="field-description">
+                            Leave blank to auto-derive bank ID from prefix + project name.
+                            Set to a specific name (e.g., "Agent0") to use that bank instead of derived format.
+                            Per-project: each project can use a different bank.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="text"
+                               x-model="config.hindsight_bank_id"
+                               placeholder="Leave blank for auto-derivation" />
+                    </div>
                 </div>
 
                 <div class="field">
@@ -205,8 +216,11 @@
                 </div>
 
                 <div class="section-description" style="margin-top: 1rem; opacity: 0.7;">
-                    <strong>Note:</strong> <code>Hindsight Base URL</code> is configured above in this settings panel (optional).
-                    <code>HINDSIGHT_API_KEY</code> is optional for local servers and can be set in <strong>Settings → Secrets</strong> if needed.
+                    <strong>Note:</strong> <code>HINDSIGHT_BASE_URL</code> and <code>Bank ID Prefix</code> are global settings
+                    shared across all projects. All other settings can be configured per-project using the
+                    project selector above. The <strong>Default</strong> project provides fallback values for
+                    projects without explicit overrides.
+                    <code>HINDSIGHT_API_KEY</code> is optional for local servers and can be set in <strong>Settings → Secrets</strong>.
                 </div>
             </div>
         </template>
