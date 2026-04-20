@@ -123,8 +123,17 @@ def is_hindsight_client_available() -> bool:
         except Exception:
             pass
     
-    # Slow path: live check (status file missing or invalid)
-    available = HINDSIGHT_AVAILABLE
+    # Slow path: live import check (status file missing or invalid)
+    # IMPORTANT: Don't trust the module-level HINDSIGHT_AVAILABLE variable
+    # because it was set at module load time and may be stale (cached from a
+    # previous Python session where hindsight_client was installed).
+    # Instead, perform a LIVE import check to verify the package is actually
+    # available in the current Python environment.
+    try:
+        from hindsight_client import Hindsight  # noqa: F401
+        available = True
+    except ImportError:
+        available = False
     
     if available:
         # Self-heal: create the status file so future checks are instant
