@@ -18,7 +18,7 @@ from usr.plugins.a0_hindsight.helpers import hindsight_helper
 
 class HindsightRetain(Extension):
 
-    def execute(self, loop_data: LoopData = LoopData(), **kwargs):
+    async def execute(self, loop_data: LoopData = LoopData(), **kwargs):
         if not self.agent:
             return
 
@@ -33,46 +33,32 @@ class HindsightRetain(Extension):
         if not config.get("hindsight_retain_enabled", True):
             return
 
-        log_item = self.agent.context.log.log(
-            type="util",
-            heading="Retaining to Hindsight...",
+        # Run retention in background to avoid blocking
+        # Using DeferredTask with async function directly (same pattern as cognee retain)
+        DeferredTask(
+            self._retain_to_hindsight,
+            self.agent,
+            context,
+            loop_data,
+            config,
+            thread_group=THREAD_BACKGROUND,
         )
 
-        # Run retain in background to avoid blocking the agent loop
-        task = DeferredTask(thread_name=THREAD_BACKGROUND)
-        task.start_task(self._retain_wrapper, loop_data, log_item)
-    
-    def _retain_wrapper(self, loop_data: LoopData, log_item):
-        """Wrapper to run async retain_to_hindsight in a new event loop."""
+    @staticmethod
+    async def _retain_to_hindsight(agent, context, loop_data, config):
+        """Background task: extract knowledge and store in Hindsight."""
         try:
-            # Create a new event loop for this background thread
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                loop.run_until_complete(self.retain_to_hindsight(loop_data, log_item))
-            finally:
-                loop.close()
-        except Exception as e:
-            err = errors.format_error(e)
-            if self.agent:
-                self.agent.context.log.log(
-                    type="warning",
-                    heading="Hindsight retain wrapper error",
-                    content=err,
-                )
-    async def retain_to_hindsight(self, loop_data: LoopData, log_item, **kwargs):
-        if not self.agent:
-            return
+            log_item = context.log.log(
+                type="util",
+                heading="Retaining to Hindsight...",
+            )
 
-        context = self.agent.context
-
-        try:
             # Get the conversation history to extract what should be retained
-            system = self.agent.read_prompt("hindsight.retain_extract.sys.md")
-            msgs_text = self.agent.concat_messages(self.agent.history)
+            system = agent.read_prompt("hindsight.retain_extract.sys.md")
+            msgs_text = agent.concat_messages(agent.history)
 
             # Call utility LLM to extract key information from conversation
-            memories_json = await self.agent.call_utility_model(
+            memories_json = await agent.call_utility_model(
                 system=system,
                 message=msgs_text,
                 background=True,
@@ -132,9 +118,12 @@ class HindsightRetain(Extension):
             )
 
         except Exception as e:
-            err = errors.format_error(e)
-            self.agent.context.log.log(
-                type="warning",
-                heading="Hindsight retain extension error",
-                content=err,
-            )
+            try:
+                err = errors.format_error(e)
+                context.log.log(
+                    type="warning",
+                    heading="Hindsight retain background error",
+                    content=err,
+                )
+            except Exception:
+                pass
