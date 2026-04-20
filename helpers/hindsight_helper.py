@@ -147,7 +147,34 @@ def is_hindsight_client_available() -> bool:
 def _get_timestamp() -> str:
     """Return current timestamp in ISO format."""
     from datetime import datetime
-    return datetime.now().isoformat()
+
+
+def _update_status_file_success(context: Optional["AgentContext"] = None) -> None:
+    """Update .dependency_status.json to reflect successful installation.
+    
+    Called after auto-install succeeds, to update the status file so future
+    is_hindsight_client_available() checks use the fast path.
+    """
+    import os
+    import json
+    
+    try:
+        plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        status_file = os.path.join(plugin_dir, ".dependency_status.json")
+        
+        status_data = {
+            "checked_at": _get_timestamp(),
+            "hindsight_client": True,
+            "warnings": [],
+            "errors": [],
+        }
+        os.makedirs(plugin_dir, exist_ok=True)
+        with open(status_file, "w") as f:
+            json.dump(status_data, f, indent=2)
+    except Exception as e:
+        if context:
+            _log(context, f"Could not update status file: {e}", "warning")
+
 
 
 def _get_secret(key: str, default: str = "", context: Optional["AgentContext"] = None) -> str:
