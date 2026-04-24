@@ -19,6 +19,7 @@ import sys
 from helpers import errors, plugins
 from helpers.extension import Extension
 from helpers.dirty_json import DirtyJson
+from helpers.history import output_text as history_output_text
 from agent import LoopData
 
 # Fix import path for hindsight plugin helpers
@@ -90,7 +91,8 @@ class HindsightRetain(Extension):
             last_idx = context._hindsight.get('last_retain_idx', 0)
             
             # Get only new messages since last retain
-            all_messages = agent.history
+            # agent.history is a History object; .messages is the underlying list
+            all_messages = agent.history.messages
             if last_idx >= len(all_messages):
                 log_item.update(heading="No new messages to retain to Hindsight.")
                 return
@@ -100,9 +102,12 @@ class HindsightRetain(Extension):
                 log_item.update(heading="No new messages to retain to Hindsight.")
                 return
 
-            # Get the conversation history to extract what should be retained
+            # Format new messages as text
+            # Note: agent.concat_messages() ignores its argument and always uses
+            # the full history, so we format the delta directly
             system = agent.read_prompt("hindsight.retain_extract.sys.md")
-            msgs_text = agent.concat_messages(new_messages)
+            new_outputs = [o for msg in new_messages for o in msg.output()]
+            msgs_text = history_output_text(new_outputs)
             # Call utility LLM to extract key information from conversation
             memories_json = await agent.call_utility_model(
                 system=system,
