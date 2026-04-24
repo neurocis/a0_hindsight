@@ -89,25 +89,25 @@ class HindsightRetain(Extension):
             if not hasattr(context, '_hindsight'):
                 context._hindsight = {}
             last_idx = context._hindsight.get('last_retain_idx', 0)
-            
-            # Get only new messages since last retain
-            # agent.history is a History object; .messages is the underlying list
-            all_messages = agent.history.messages
-            if last_idx >= len(all_messages):
+            # Get flattened output messages via History's public API
+            # History has no .messages attribute — messages are spread across
+            # .bulks, .topics, and .current. The .output() method returns the
+            # canonical flat list[OutputMessage].
+            all_output = agent.history.output()
+            if last_idx >= len(all_output):
                 log_item.update(heading="No new messages to retain to Hindsight.")
                 return
             
-            new_messages = all_messages[last_idx:]
-            if not new_messages:
+            new_output = all_output[last_idx:]
+            if not new_output:
                 log_item.update(heading="No new messages to retain to Hindsight.")
                 return
 
-            # Format new messages as text
-            # Note: agent.concat_messages() ignores its argument and always uses
+            # Format new messages as text using the history module's output_text()
+            # Note: agent.concat_messages() ignores its argument and always returns
             # the full history, so we format the delta directly
             system = agent.read_prompt("hindsight.retain_extract.sys.md")
-            new_outputs = [o for msg in new_messages for o in msg.output()]
-            msgs_text = history_output_text(new_outputs)
+            msgs_text = history_output_text(new_output)
             # Call utility LLM to extract key information from conversation
             memories_json = await agent.call_utility_model(
                 system=system,
@@ -165,7 +165,7 @@ class HindsightRetain(Extension):
             bank_id = hindsight_helper.get_bank_id(context)
             
             # Update delta tracking index after successful retention
-            context._hindsight['last_retain_idx'] = len(all_messages)
+            context._hindsight['last_retain_idx'] = len(all_output)
             
             log_item.update(
                 heading=f"Hindsight: {retained} memories retained to bank '{bank_id}'",
