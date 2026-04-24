@@ -169,7 +169,7 @@ class HindsightRetain(Extension):
             
             log_item.update(
                 heading=f"Hindsight: {retained} memories retained to bank '{bank_id}'",
-                content=f"Retained: {retained}, Failed: {failed}, New msgs processed: {len(new_messages)}",
+                content=f"Retained: {retained}, Failed: {failed}, New msgs processed: {len(new_output)}",
             )
 
         except Exception as e:
