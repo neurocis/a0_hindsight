@@ -133,55 +133,59 @@ def _get_plugin_config(agent: Any) -> Dict[str, Any]:
 
 def is_hindsight_client_available() -> bool:
     """Runtime check for hindsight_client availability.
-    
-    Fast path: reads .dependency_status.json file created by hooks.py install().
-    Slow path: performs live import check if status file missing (self-healing).
-    
-    Returns True if hindsight_client is available, False otherwise.
+
+    The dependency status file is advisory only.  It can become stale when the
+    plugin was installed/checked from a different Python runtime than the
+    Agent Zero backend.  The authoritative check is always a live import in the
+    current process.  When the import succeeds, refresh the module-level
+    Hindsight reference so later calls to get_client() work without a restart.
     """
     import os
     import json
-    
+
+    global HINDSIGHT_AVAILABLE, Hindsight
+
     plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     status_file = os.path.join(plugin_dir, ".dependency_status.json")
-    
-    # Fast path: check cached status file from installation
-    if os.path.isfile(status_file):
-        try:
-            with open(status_file, "r") as f:
-                status = json.load(f)
-                if status.get("hindsight_client"):
-                    return True
-        except Exception:
-            pass
-    
-    # Slow path: live import check (status file missing or invalid)
-    # IMPORTANT: Don't trust the module-level HINDSIGHT_AVAILABLE variable
-    # because it was set at module load time and may be stale (cached from a
-    # previous Python session where hindsight_client was installed).
-    # Instead, perform a LIVE import check to verify the package is actually
-    # available in the current Python environment.
+
     try:
-        from hindsight_client import Hindsight  # noqa: F401
+        from hindsight_client import Hindsight as _Hindsight
+        Hindsight = _Hindsight
+        HINDSIGHT_AVAILABLE = True
         available = True
-    except ImportError:
+    except Exception as exc:
+        Hindsight = None  # type: ignore[assignment]
+        HINDSIGHT_AVAILABLE = False
         available = False
-    
-    if available:
-        # Self-heal: create the status file so future checks are instant
+        # Mark the cached status as stale/failed so init can auto-install.
         try:
             status_data = {
                 "checked_at": _get_timestamp(),
-                "hindsight_client": True,
-                "warnings": ["auto-created by lazy init (hooks.install was not run)"],
-                "errors": [],
+                "hindsight_client": False,
+                "warnings": [],
+                "errors": [f"live import failed in current runtime: {type(exc).__name__}: {exc}"],
             }
             os.makedirs(plugin_dir, exist_ok=True)
             with open(status_file, "w") as f:
                 json.dump(status_data, f, indent=2)
         except Exception:
-            pass  # Status file creation failed, but hindsight_client is available
-    
+            pass
+        return False
+
+    # Self-heal status file after a successful live import.
+    try:
+        status_data = {
+            "checked_at": _get_timestamp(),
+            "hindsight_client": True,
+            "warnings": [],
+            "errors": [],
+        }
+        os.makedirs(plugin_dir, exist_ok=True)
+        with open(status_file, "w") as f:
+            json.dump(status_data, f, indent=2)
+    except Exception:
+        pass
+
     return available
 
 
@@ -264,7 +268,7 @@ def get_api_key(context: Optional["AgentContext"] = None) -> Optional[str]:
 
 def is_configured(context: Optional["AgentContext"] = None) -> bool:
     """Check if Hindsight SDK is available and base URL is set."""
-    if not HINDSIGHT_AVAILABLE:
+    if not is_hindsight_client_available():
         return False
     agent = getattr(context, "agent0", None) if context else None
     return bool(get_base_url(context, agent))
@@ -276,7 +280,7 @@ def get_client(context: Optional["AgentContext"] = None) -> Optional[Any]:
     A new client is created each time to avoid stale aiohttp ClientSession
     issues across different async contexts or event loops (see GitHub #1).
     """
-    if not HINDSIGHT_AVAILABLE:
+    if not is_hindsight_client_available():
         return None
 
     agent = getattr(context, "agent0", None) if context else None
