@@ -8,13 +8,16 @@
 #   These are always read from the global (no-project) scope.
 #
 # PER-PROJECT (can vary per project via the project selector):
-#   - hindsight_bank_id: Explicit bank ID override
+#   - hindsight_bank_id: Explicit shared project bank ID override
 #   - hindsight_retain_enabled: Store conversation memories after each interaction
 #   - hindsight_recall_enabled: Enrich recall with semantic search
 #   - hindsight_reflect_enabled: Inject disposition-aware context
-#   - All other settings below
-#   Use the "Default" project for fallback values that apply when a
-#   project has no explicit override.
+#   - Budgets, token limits, cache TTL, debug
+#
+# PER-AGENT (managed from the Hindsight chat tab):
+#   - hindsight_agent_memory_enabled: Write to an agent-specific bank
+#   - hindsight_agent_bank_id: Explicit agent bank name; blank = agent profile
+#   - hindsight_agent_retain_to_project: Also copy agent memories to project bank
 
 # ─── Global Settings ────────────────────────────────────────
 
@@ -48,3 +51,17 @@ hindsight_cache_ttl: 120
 
 # Debug logging
 hindsight_debug: false
+
+# ─── Per-Agent Settings ─────────────────────────────────────
+
+# Enable agent-specific memory. When enabled, retain defaults to the agent bank,
+# while recall/reflect read from agent + project banks with de-duplication.
+hindsight_agent_memory_enabled: false
+
+# Explicit agent memory bank name. Leave blank to use the active agent profile name.
+hindsight_agent_bank_id: ""
+
+# When agent memory is enabled, also retain normal agent memories to the project bank.
+# Default false keeps the project bank clean unless the user explicitly asks to
+# remember something for the project.
+hindsight_agent_retain_to_project: false

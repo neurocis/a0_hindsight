@@ -1,0 +1,154 @@
+<script type="module">
+  import { store } from "/plugins/a0_hindsight/webui/hindsight-store.js";
+</script>
+
+<span
+  class="a0-hindsight-tab-anchor"
+  x-data
+  x-effect="$store.a0Hindsight?.onContextChanged($store.chats?.selected || '')"
+  @keydown.escape.window="$store.a0Hindsight?.close()"
+>
+  <button
+    type="button"
+    class="text-button"
+    :class="$store.a0Hindsight?.visible ? 'a0-hindsight-toggle-open' : ''"
+    title="Hindsight"
+    @click.prevent.stop="$store.a0Hindsight.toggle()"
+  >
+    <span class="material-symbols-outlined" aria-hidden="true">history</span>
+    <p>Hindsight</p>
+  </button>
+
+  <div
+    x-cloak
+    x-show="$store.a0Hindsight && $store.a0Hindsight.visible"
+    x-transition:enter="a0-hindsight-slide-enter-active"
+    x-transition:enter-start="a0-hindsight-slide-enter-from"
+    x-transition:enter-end="a0-hindsight-slide-enter-to"
+    x-transition:leave="a0-hindsight-slide-leave-active"
+    x-transition:leave-start="a0-hindsight-slide-leave-from"
+    x-transition:leave-end="a0-hindsight-slide-leave-to"
+    class="a0-hindsight-panel"
+    role="dialog"
+    aria-label="Hindsight Agent Memory"
+    @click.stop
+  >
+    <div class="a0-hindsight-header">
+      <div>
+        <div class="a0-hindsight-title">Hindsight</div>
+        <div class="a0-hindsight-subtitle" x-text="$store.a0Hindsight.scopeLabel()"></div>
+      </div>
+      <div class="a0-hindsight-actions">
+        <button type="button" class="a0-hindsight-small-button" @click="$store.a0Hindsight.refresh({ force: true })" :disabled="$store.a0Hindsight.loading || $store.a0Hindsight.saving">Refresh</button>
+        <button type="button" class="a0-hindsight-small-button" @click="$store.a0Hindsight.close()">Close</button>
+      </div>
+    </div>
+
+    <template x-if="$store.a0Hindsight.loading">
+      <div class="a0-hindsight-muted">Loading Hindsight settings…</div>
+    </template>
+
+    <template x-if="!$store.a0Hindsight.loading">
+      <div class="a0-hindsight-content">
+        <section class="a0-hindsight-section">
+          <div class="a0-hindsight-section-header">
+            <h3>Agent memory</h3>
+            <span>Per-agent all-or-nothing memory routing</span>
+          </div>
+
+          <label class="a0-hindsight-toggle-row">
+            <input type="checkbox" x-model="$store.a0Hindsight.draft.hindsight_agent_memory_enabled" />
+            <span>
+              <strong>Enable agent-specific memory</strong>
+              <em>Writes to this agent's bank. Recall and reflect read from agent + project banks with de-duplication.</em>
+            </span>
+          </label>
+
+          <label class="a0-hindsight-field">
+            <span>Agent bank name</span>
+            <input
+              type="text"
+              x-model="$store.a0Hindsight.draft.hindsight_agent_bank_id"
+              :placeholder="$store.a0Hindsight.agentProfile || 'agent0'"
+            />
+            <small>If blank, defaults to the current agent profile/name.</small>
+          </label>
+
+          <label class="a0-hindsight-toggle-row">
+            <input type="checkbox" x-model="$store.a0Hindsight.draft.hindsight_agent_retain_to_project" />
+            <span>
+              <strong>Also retain agent memories to the project bank</strong>
+              <em>Default off. Project bank writes still happen when the user explicitly says “remember this for the project”.</em>
+            </span>
+          </label>
+        </section>
+
+        <section class="a0-hindsight-section">
+          <div class="a0-hindsight-section-header">
+            <h3>Effective routing</h3>
+            <span>Preview for this chat context</span>
+          </div>
+
+          <div class="a0-hindsight-route-grid">
+            <div><strong>Project</strong><code x-text="$store.a0Hindsight.projectName || 'default'"></code></div>
+            <div><strong>Agent profile</strong><code x-text="$store.a0Hindsight.agentProfile || 'agent0'"></code></div>
+            <div><strong>Project bank</strong><code x-text="$store.a0Hindsight.projectBankId"></code></div>
+            <div><strong>Agent bank</strong><code x-text="$store.a0Hindsight.previewAgentBank()"></code></div>
+            <div><strong>Writes by default</strong><code x-text="$store.a0Hindsight.previewRetainBanks().join(', ')"></code></div>
+            <div><strong>Reads from</strong><code x-text="$store.a0Hindsight.previewRecallBanks().join(', ')"></code></div>
+          </div>
+
+          <p class="a0-hindsight-muted">
+            Explicit project-memory phrases such as <code>remember this for the project</code> write to both the agent and project banks when agent memory is enabled.
+          </p>
+        </section>
+      </div>
+    </template>
+
+    <div class="a0-hindsight-save-row">
+      <div class="a0-hindsight-muted" x-show="$store.a0Hindsight.hasUnsavedChanges()">Unsaved changes</div>
+      <div class="a0-hindsight-muted" x-show="!$store.a0Hindsight.hasUnsavedChanges()">Saved</div>
+      <button
+        type="button"
+        class="a0-hindsight-save-button"
+        @click="$store.a0Hindsight.save()"
+        :disabled="$store.a0Hindsight.saving || !$store.a0Hindsight.hasUnsavedChanges()"
+      >
+        <span x-text="$store.a0Hindsight.saving ? 'Saving…' : 'Save'"></span>
+      </button>
+    </div>
+  </div>
+</span>
+
+<style>
+  .a0-hindsight-tab-anchor { position: relative; display: inline-flex; align-items: stretch; --a0-hindsight-panel-width: min(760px, calc(100vw - 1rem)); --a0-hindsight-panel-max-height: min(640px, 78vh); --a0-hindsight-tab-offset-left: 0px; }
+  .a0-hindsight-tab-anchor > .text-button { position: relative; z-index: 10002; }
+  .a0-hindsight-toggle-open { background-color: var(--color-background-hover) !important; border-radius: 0 0 4px 4px; opacity: 1 !important; }
+  .a0-hindsight-host-lifted { position: relative; z-index: 10002; overflow: visible !important; }
+  .a0-hindsight-compose-lifted { position: relative; z-index: 10002; transform: translateY(calc(-1 * var(--a0-hindsight-panel-lift, 18rem))); transition: transform 180ms ease; will-change: transform; }
+  .a0-hindsight-output-lifted { transition: height 180ms ease, max-height 180ms ease, padding-bottom 180ms ease, margin-bottom 180ms ease; }
+  .a0-hindsight-panel { position: absolute; left: calc(-1 * var(--a0-hindsight-tab-offset-left, 0px)); bottom: calc(100% - 1px); z-index: 10001; width: var(--a0-hindsight-panel-width); max-width: calc(100vw - 1rem); height: var(--a0-hindsight-panel-height, auto); max-height: var(--a0-hindsight-panel-max-height); min-height: min(340px, var(--a0-hindsight-panel-height, 340px)); overflow: hidden; display: flex; flex-direction: column; color: var(--color-text); background: var(--color-panel, var(--color-bg)); border: 1px solid var(--color-border); border-radius: 14px 14px 0 0; box-shadow: 0 18px 48px rgba(0,0,0,.38); padding: 1rem; transform-origin: bottom center; }
+  .a0-hindsight-slide-enter-active, .a0-hindsight-slide-leave-active { transition: opacity .18s ease, transform .18s ease; }
+  .a0-hindsight-slide-enter-from, .a0-hindsight-slide-leave-to { opacity: 0; transform: translateY(18px); }
+  .a0-hindsight-slide-enter-to, .a0-hindsight-slide-leave-from { opacity: 1; transform: translateY(0); }
+  .a0-hindsight-header, .a0-hindsight-actions, .a0-hindsight-section-header, .a0-hindsight-save-row { display: flex; align-items: center; gap: .65rem; }
+  .a0-hindsight-header, .a0-hindsight-save-row { justify-content: space-between; }
+  .a0-hindsight-title { font-weight: 700; font-size: 1rem; }
+  .a0-hindsight-subtitle, .a0-hindsight-muted, .a0-hindsight-field small, .a0-hindsight-toggle-row em, .a0-hindsight-section-header span { color: var(--color-text-secondary); font-size: .82rem; font-style: normal; }
+  .a0-hindsight-content { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .85fr); gap: 1rem; overflow: auto; padding: .75rem .1rem; }
+  .a0-hindsight-section { border: 1px solid var(--color-border); border-radius: 12px; padding: .85rem; background: rgba(127,127,127,.04); }
+  .a0-hindsight-section-header { justify-content: space-between; margin-bottom: .8rem; }
+  .a0-hindsight-section-header h3 { margin: 0; font-size: .95rem; }
+  .a0-hindsight-toggle-row { display: flex; gap: .75rem; align-items: flex-start; padding: .7rem 0; border-bottom: 1px solid var(--color-border); }
+  .a0-hindsight-toggle-row:last-child { border-bottom: none; }
+  .a0-hindsight-toggle-row span { display: grid; gap: .25rem; }
+  .a0-hindsight-field { display: grid; gap: .35rem; padding: .7rem 0; border-bottom: 1px solid var(--color-border); }
+  .a0-hindsight-field input { width: 100%; border: 1px solid var(--color-border); border-radius: 8px; padding: .55rem .65rem; background: var(--color-input-background, var(--color-bg)); color: var(--color-text); }
+  .a0-hindsight-route-grid { display: grid; gap: .65rem; }
+  .a0-hindsight-route-grid > div { display: grid; gap: .25rem; }
+  .a0-hindsight-route-grid code, .a0-hindsight-muted code { white-space: normal; word-break: break-word; }
+  .a0-hindsight-small-button, .a0-hindsight-save-button { border: 1px solid var(--color-border); border-radius: 8px; padding: .45rem .7rem; background: var(--color-background); color: var(--color-text); cursor: pointer; }
+  .a0-hindsight-save-button { background: var(--color-accent, #6c5ce7); color: white; border-color: transparent; }
+  .a0-hindsight-small-button:disabled, .a0-hindsight-save-button:disabled { opacity: .55; cursor: not-allowed; }
+  @media (max-width: 760px) { .a0-hindsight-content { grid-template-columns: 1fr; } }
+</style>

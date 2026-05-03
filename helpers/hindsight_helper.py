@@ -10,7 +10,7 @@ extensions run inside an async event loop.
 import os
 import sys
 import time
-from typing import Optional, Dict, Any, TYPE_CHECKING
+from typing import Optional, Dict, Any, TYPE_CHECKING, List
 if TYPE_CHECKING:
     from agent import AgentContext
 
@@ -54,6 +54,9 @@ _DEFAULTS: Dict[str, Any] = {
     "hindsight_reflect_max_tokens": 500,
     "hindsight_cache_ttl": 120,
     "hindsight_debug": False,
+    "hindsight_agent_memory_enabled": False,
+    "hindsight_agent_bank_id": "",
+    "hindsight_agent_retain_to_project": False,
 }
 
 
@@ -71,42 +74,65 @@ def _log(context: Optional["AgentContext"], msg: str, log_type: str = "info") ->
 # Settings that are GLOBAL (shared across all projects)
 _GLOBAL_SETTINGS = {"hindsight_base_url", "hindsight_bank_prefix"}
 
+# Settings that are meaningful only at agent-profile scope.
+_AGENT_SETTINGS = {
+    "hindsight_agent_memory_enabled",
+    "hindsight_agent_bank_id",
+    "hindsight_agent_retain_to_project",
+}
+
 
 def _get_plugin_config(agent: Any) -> Dict[str, Any]:
-    """Read plugin settings with global/per-project merge.
-    
-    Global settings (hindsight_base_url, hindsight_bank_prefix) are always
-    read from the global (no-project) scope, then per-project settings are
-    layered on top. This ensures server connection info is shared while
-    feature toggles and operational settings can vary per project.
-    
-    Priority:
-    1. A0 framework get_plugin_config() (resolves project/agent scope)
-    2. Global config for global-only settings (base_url, bank_prefix)
-    3. Direct config.json file read (Docker-safe fallback)
-    4. _DEFAULTS only
+    """Read plugin settings with global/project/agent merge.
+
+    Global settings (base URL and bank prefix) are always taken from the
+    global scope. Project settings control normal Hindsight operation. Agent
+    settings only control whether the active agent writes to its own bank and
+    whether those writes are also copied to the project bank.
+
+    Explicit False values are valid and must be preserved; never use truthiness
+    checks when merging user settings.
     """
-    config = {}
-    
-    # Try A0 framework config API first (requires valid agent reference)
+    config: Dict[str, Any] = {}
+
     if agent is not None:
         try:
             from helpers.plugins import get_plugin_config
-            # Read project-scoped config (all settings for this project)
+
+            # With per_agent_config enabled, this resolves the most specific
+            # project+agent scope available, falling back through project,
+            # agent, global/default according to the framework search order.
             config = get_plugin_config("a0_hindsight", agent=agent) or {}
-            
-            # Always force global settings from global scope
-            # (base_url and bank_prefix must not vary per project)
-            global_config = get_plugin_config("a0_hindsight", agent=agent, project_name="") or {}
+
+            # Always force global-only connection/naming settings from global.
+            global_config = get_plugin_config(
+                "a0_hindsight",
+                agent=agent,
+                project_name="",
+                agent_profile="",
+            ) or {}
             for key in _GLOBAL_SETTINGS:
                 if key in global_config:
                     config[key] = global_config[key]
+
+            # Agent memory controls should come from the active agent profile
+            # scope, not from a project/default fallback accidentally.
+            agent_profile = _get_agent_profile(agent)
+            if agent_profile:
+                agent_config = get_plugin_config(
+                    "a0_hindsight",
+                    agent=agent,
+                    project_name="",
+                    agent_profile=agent_profile,
+                ) or {}
+                for key in _AGENT_SETTINGS:
+                    if key in agent_config:
+                        config[key] = agent_config[key]
         except Exception as e:
-            import traceback
             print(f"[HINDSIGHT DEBUG] _get_plugin_config() framework API failed: {type(e).__name__}: {e}")
             config = {}
-    
-    # Fallback: read config.json directly from plugin directory (Docker-persistent)
+
+    # Fallback: read config.json directly from plugin directory.
     if not config or not config.get("hindsight_base_url"):
         try:
             import json
@@ -117,8 +143,6 @@ def _get_plugin_config(agent: Any) -> Dict[str, Any]:
             if os.path.isfile(config_path):
                 with open(config_path, "r") as f:
                     file_config = json.load(f)
-                # Merge: file values only fill truly missing keys
-                # (not False booleans, which are valid user choices)
                 for k, v in file_config.items():
                     if k not in config:
                         config[k] = v
@@ -303,51 +327,211 @@ def get_client(context: Optional["AgentContext"] = None) -> Optional[Any]:
         return None
 
 
-def get_bank_id(context: "AgentContext") -> str:
-    """Derive a Hindsight bank ID from the agent context.
+def _sanitize_bank_part(value: Any, fallback: str = "default") -> str:
+    """Sanitize a project/profile value for use in a derived bank ID."""
+    import re
+    text = str(value or "").strip()
+    if not text:
+        text = fallback
+    text = re.sub(r"\s+", "-", text)
+    text = re.sub(r"[^A-Za-z0-9_.:-]+", "-", text)
+    text = text.strip("-._:")
+    return text or fallback
 
-    Uses the bank prefix + project name (if active) for memory isolation.
-    Always uses the actual project name when a project is active,
-    even if the project has no per-project settings defined.
-    Only falls back to prefix + 'default' when no project is active at all.
-    
-    If hindsight_bank_id is explicitly set in config, that takes priority.
-    """
-    agent0 = getattr(context, "agent0", None)
-    config = _get_plugin_config(agent0)
-    
-    # Explicit override takes priority
-    explicit_id = config.get("hindsight_bank_id", "").strip()
-    if explicit_id:
-        return explicit_id
-    
-    prefix = config.get("hindsight_bank_prefix", "a0")
 
-    # Resolve project name using the framework's context data.
-    # This always returns the active project name when one is active,
-    # even if the project has no per-project plugin settings defined.
+def _get_agent_profile(agent: Any = None, context: Optional["AgentContext"] = None) -> str:
+    """Return the active agent profile key, falling back to agent0."""
+    try:
+        if agent is None and context is not None:
+            agent = getattr(context, "agent0", None)
+        profile = getattr(getattr(agent, "config", None), "profile", "")
+        return str(profile or "agent0").strip() or "agent0"
+    except Exception:
+        return "agent0"
+
+
+def _get_project_name(context: Optional["AgentContext"]) -> str:
+    """Return the active project name, if any."""
     project_name = None
     try:
         from helpers.projects import get_context_project_name
-        project_name = get_context_project_name(context)
+        project_name = get_context_project_name(context) if context else None
     except Exception:
         pass
-
-    # Fallback: try context.project.name (less reliable)
-    if not project_name:
+    if not project_name and context is not None:
         try:
             if hasattr(context, "project") and context.project:
                 project_name = getattr(context.project, "name", None)
         except Exception:
             pass
+    return str(project_name or "").strip()
 
+
+def get_project_bank_id(context: "AgentContext") -> str:
+    """Derive the shared project/default Hindsight bank ID."""
+    agent0 = getattr(context, "agent0", None)
+    config = _get_plugin_config(agent0)
+
+    explicit_id = config.get("hindsight_bank_id", "").strip()
+    if explicit_id:
+        return explicit_id
+
+    prefix = _sanitize_bank_part(config.get("hindsight_bank_prefix", "a0"), "a0")
+    project_name = _get_project_name(context)
     if project_name:
-        return f"{prefix}-{project_name}"
+        return f"{prefix}-{_sanitize_bank_part(project_name)}"
     return f"{prefix}-default"
 
 
+def get_agent_bank_id(context: "AgentContext") -> str:
+    """Return the active agent's Hindsight bank ID.
+
+    Explicit agent bank ID wins. If blank, default to the active agent profile
+    name exactly enough to be recognizable, sanitized only for safety.
+    """
+    agent0 = getattr(context, "agent0", None)
+    config = _get_plugin_config(agent0)
+    explicit_id = str(config.get("hindsight_agent_bank_id", "") or "").strip()
+    if explicit_id:
+        return explicit_id
+    return _sanitize_bank_part(_get_agent_profile(agent0, context), "agent0")
+
+
+def is_agent_memory_enabled(context: "AgentContext") -> bool:
+    agent0 = getattr(context, "agent0", None)
+    config = _get_plugin_config(agent0)
+    return bool(config.get("hindsight_agent_memory_enabled", False))
+
+
+def _has_project_memory_intent(content: str) -> bool:
+    """Detect explicit user intent to remember something for the project."""
+    text = (content or "").lower()
+    phrases = (
+        "remember this for the project",
+        "remember for this project",
+        "remember x for this project",
+        "store this in project memory",
+        "save this to project memory",
+        "add this to project memory",
+        "remember this in project memory",
+        "remember this for everyone",
+        "remember for everyone",
+        "shared project memory",
+        "for this project remember",
+    )
+    return any(phrase in text for phrase in phrases)
+
+
+def get_retain_bank_ids(context: "AgentContext", content: str = "") -> List[str]:
+    """Return bank IDs to retain into for this memory content."""
+    agent0 = getattr(context, "agent0", None)
+    config = _get_plugin_config(agent0)
+
+    project_bank = get_project_bank_id(context)
+    if not config.get("hindsight_agent_memory_enabled", False):
+        return [project_bank]
+
+    banks = [get_agent_bank_id(context)]
+    if config.get("hindsight_agent_retain_to_project", False) or _has_project_memory_intent(content):
+        banks.append(project_bank)
+    return _dedupe_bank_ids(banks)
+
+
+def get_recall_bank_ids(context: "AgentContext") -> List[str]:
+    """Return layered recall/reflect bank IDs in priority order."""
+    agent0 = getattr(context, "agent0", None)
+    config = _get_plugin_config(agent0)
+    project_bank = get_project_bank_id(context)
+    if not config.get("hindsight_agent_memory_enabled", False):
+        return [project_bank]
+    return _dedupe_bank_ids([get_agent_bank_id(context), project_bank])
+
+
+def get_bank_id(context: "AgentContext") -> str:
+    """Backward-compatible primary retain bank ID."""
+    banks = get_retain_bank_ids(context)
+    return banks[0] if banks else get_project_bank_id(context)
+
+
+def _dedupe_bank_ids(bank_ids: List[str]) -> List[str]:
+    result: List[str] = []
+    seen = set()
+    for bank_id in bank_ids:
+        key = str(bank_id or "").strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        result.append(key)
+    return result
+
+
+def _response_text(result: Any) -> Optional[str]:
+    """Extract useful text from a Hindsight SDK response."""
+    if result is None:
+        return None
+    for attr in ("content", "text", "response"):
+        value = getattr(result, attr, None)
+        if value:
+            return str(value)
+    facts = getattr(result, "facts", None)
+    if facts:
+        facts_text = []
+        for fact in facts:
+            for attr in ("content", "text"):
+                value = getattr(fact, attr, None)
+                if value:
+                    facts_text.append(str(value))
+                    break
+            else:
+                facts_text.append(str(fact))
+        return "\n".join(facts_text) if facts_text else None
+    result_str = str(result)
+    return result_str if result_str and result_str != "None" else None
+
+
+def _normalize_memory_text(text: str) -> str:
+    import re
+    normalized = str(text or "").lower().strip()
+    normalized = re.sub(r"\s+", " ", normalized)
+    normalized = re.sub(r"^[\-•*\s]+", "", normalized)
+    normalized = re.sub(r"\s*[.;]+$", "", normalized)
+    return normalized
+
+
+def _dedupe_recall_sections(sections: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    seen = set()
+    deduped: List[Dict[str, str]] = []
+    for section in sections:
+        text = section.get("text", "")
+        lines = []
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            key = _normalize_memory_text(line)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            lines.append(line)
+        if lines:
+            deduped.append({**section, "text": "\n".join(lines)})
+    return deduped
+
+
+def _format_layered_recall(sections: List[Dict[str, str]]) -> Optional[str]:
+    if not sections:
+        return None
+    parts = []
+    for section in sections:
+        label = section.get("label") or section.get("bank_id") or "memory"
+        text = section.get("text", "").strip()
+        if text:
+            parts.append(f"[{label}]\n{text}")
+    return "\n\n".join(parts) if parts else None
+
+
 async def retain_memory(context: "AgentContext", content: str, metadata: Optional[Dict[str, str]] = None) -> bool:
-    """Store a memory in Hindsight via async retain."""
+    """Store a memory in one or more Hindsight banks via async retain."""
     if not is_configured(context):
         return False
 
@@ -360,28 +544,35 @@ async def retain_memory(context: "AgentContext", content: str, metadata: Optiona
     if not client:
         return False
 
-    bank_id = get_bank_id(context)
-
-    try:
-        kwargs: Dict[str, Any] = {
-            "bank_id": bank_id,
-            "content": content[:10000],  # Limit content size
-        }
-        if metadata:
-            kwargs["metadata"] = metadata
-
-        await client.aretain(**kwargs)
-
-        if config.get("hindsight_debug", False):
-            _log(context, f"Retained memory to bank '{bank_id}': {content[:80]}...", "util")
-        return True
-    except Exception as e:
-        _log(context, f"Retain error: {e}", "error")
+    bank_ids = get_retain_bank_ids(context, content)
+    if not bank_ids:
         return False
+
+    retained = 0
+    for bank_id in bank_ids:
+        try:
+            kwargs: Dict[str, Any] = {
+                "bank_id": bank_id,
+                "content": content[:10000],  # Limit content size
+            }
+            meta = dict(metadata or {})
+            if len(bank_ids) > 1:
+                meta["hindsight_retain_targets"] = ",".join(bank_ids)
+            if meta:
+                kwargs["metadata"] = meta
+
+            await client.aretain(**kwargs)
+            retained += 1
+            if config.get("hindsight_debug", False):
+                _log(context, f"Retained memory to bank '{bank_id}': {content[:80]}...", "util")
+        except Exception as e:
+            _log(context, f"Retain error for bank '{bank_id}': {e}", "error")
+
+    return retained > 0
 
 
 async def recall_memories(context: "AgentContext", query: str) -> Optional[str]:
-    """Search Hindsight memories via async recall."""
+    """Search Hindsight memories via async layered recall."""
     if not is_configured(context):
         return None
 
@@ -393,58 +584,46 @@ async def recall_memories(context: "AgentContext", query: str) -> Optional[str]:
     client = get_client(context)
     if not client:
         return None
-    bank_id = get_bank_id(context)
 
     try:
-        # Validate and truncate query before sending
-        # Hindsight service enforces a 500-token query limit.
-        # ~1500 chars is safely under 500 tokens for most tokenizers (GitHub #1 Bug 3).
         if not query or not query.strip():
             _log(context, "Recall query is empty after validation", "debug")
             return None
-        
         safe_query = query.strip()[:1500]
-        
-        result = await client.arecall(
-            bank_id=bank_id,
-            query=safe_query,
-            max_tokens=config.get("hindsight_recall_max_tokens", 4096),
-            budget=config.get("hindsight_recall_budget", "mid"),
-        )
 
-        # Extract text content from recall response
-        if hasattr(result, "content") and result.content:
-            return result.content
-        elif hasattr(result, "text") and result.text:
-            return result.text
-        elif hasattr(result, "facts") and result.facts:
-            # Format facts into readable text
-            facts_text = []
-            for fact in result.facts:
-                if hasattr(fact, "content"):
-                    facts_text.append(fact.content)
-                elif hasattr(fact, "text"):
-                    facts_text.append(fact.text)
+        bank_ids = get_recall_bank_ids(context)
+        sections: List[Dict[str, str]] = []
+        for index, bank_id in enumerate(bank_ids):
+            try:
+                result = await client.arecall(
+                    bank_id=bank_id,
+                    query=safe_query,
+                    max_tokens=config.get("hindsight_recall_max_tokens", 4096),
+                    budget=config.get("hindsight_recall_budget", "mid"),
+                )
+                text = _response_text(result)
+                if text and text.strip():
+                    sections.append({
+                        "bank_id": bank_id,
+                        "label": "agent" if index == 0 and is_agent_memory_enabled(context) else "project",
+                        "text": text.strip(),
+                    })
+            except Exception as e:
+                error_msg = str(e)
+                if "400" in error_msg or "Bad Request" in error_msg:
+                    _log(context, f"Recall 400 Bad Request: {error_msg[:200]}. Query length: {len(query) if query else 0}. Bank: {bank_id}", "warning")
                 else:
-                    facts_text.append(str(fact))
-            return "\n".join(facts_text) if facts_text else None
-        else:
-            # Try converting to string as last resort
-            result_str = str(result)
-            return result_str if result_str and result_str != "None" else None
+                    _log(context, f"Recall error for bank '{bank_id}': {error_msg}", "error")
+
+        return _format_layered_recall(_dedupe_recall_sections(sections))
 
     except Exception as e:
-        error_msg = str(e)
-        # Log more detailed error info for debugging
-        if "400" in error_msg or "Bad Request" in error_msg:
-            _log(context, f"Recall 400 Bad Request: {error_msg[:200]}. Query length: {len(query) if query else 0}. Bank: {bank_id}", "warning")
-        else:
-            _log(context, f"Recall error: {error_msg}", "error")
+        _log(context, f"Recall error: {e}", "error")
         return None
 
 
 async def reflect_context(context: "AgentContext", query: str) -> Optional[str]:
-    """Generate disposition-aware context from Hindsight via async reflect."""
+    """Generate disposition-aware context from Hindsight via layered reflect."""
     if not is_configured(context):
         return None
 
@@ -453,10 +632,11 @@ async def reflect_context(context: "AgentContext", query: str) -> Optional[str]:
     if not config.get("hindsight_reflect_enabled", True):
         return None
 
-    bank_id = get_bank_id(context)
+    bank_ids = get_recall_bank_ids(context)
+    bank_key = "+".join(bank_ids)
 
     # Check cache
-    cache_key = f"{bank_id}:{getattr(context, 'id', 'default')}"
+    cache_key = f"{bank_key}:{getattr(context, 'id', 'default')}"
     cache_ttl = config.get("hindsight_cache_ttl", 120)
     if cache_key in _reflect_cache:
         cached_time, cached_content = _reflect_cache[cache_key]
@@ -468,30 +648,30 @@ async def reflect_context(context: "AgentContext", query: str) -> Optional[str]:
         return None
 
     try:
-        # Truncate query to stay within Hindsight's 500-token query limit (GitHub #1 Bug 3)
         safe_query = query.strip()[:1500] if query else ""
         if not safe_query:
             return None
-        
-        result = await client.areflect(
-            bank_id=bank_id,
-            query=safe_query,
-            budget=config.get("hindsight_reflect_budget", "low"),
-            max_tokens=config.get("hindsight_reflect_max_tokens", 500),
-        )
 
-        content = None
-        if hasattr(result, "content") and result.content:
-            content = result.content
-        elif hasattr(result, "text") and result.text:
-            content = result.text
-        elif hasattr(result, "response") and result.response:
-            content = result.response
-        else:
-            result_str = str(result)
-            if result_str and result_str != "None":
-                content = result_str
+        sections: List[Dict[str, str]] = []
+        for index, bank_id in enumerate(bank_ids):
+            try:
+                result = await client.areflect(
+                    bank_id=bank_id,
+                    query=safe_query,
+                    budget=config.get("hindsight_reflect_budget", "low"),
+                    max_tokens=config.get("hindsight_reflect_max_tokens", 500),
+                )
+                text = _response_text(result)
+                if text and text.strip():
+                    sections.append({
+                        "bank_id": bank_id,
+                        "label": "agent" if index == 0 and is_agent_memory_enabled(context) else "project",
+                        "text": text.strip(),
+                    })
+            except Exception as e:
+                _log(context, f"Reflect error for bank '{bank_id}': {e}", "error")
 
+        content = _format_layered_recall(_dedupe_recall_sections(sections))
         _reflect_cache[cache_key] = (time.time(), content)
         return content
 

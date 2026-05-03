@@ -162,14 +162,19 @@ class HindsightRetain(Extension):
                 else:
                     failed += 1
 
-            bank_id = hindsight_helper.get_bank_id(context)
+            retain_banks = hindsight_helper.get_retain_bank_ids(context, msgs_text)
+            recall_banks = hindsight_helper.get_recall_bank_ids(context)
+            bank_label = ", ".join(retain_banks)
             
             # Update delta tracking index after successful retention
             context._hindsight['last_retain_idx'] = len(all_output)
             
             log_item.update(
-                heading=f"Hindsight: {retained} memories retained to bank '{bank_id}'",
-                content=f"Retained: {retained}, Failed: {failed}, New msgs processed: {len(new_output)}",
+                heading=f"Hindsight: {retained} memories retained to bank(s): {bank_label}",
+                content=(
+                    f"Retained: {retained}, Failed: {failed}, New msgs processed: {len(new_output)}\n"
+                    f"Recall layers: {', '.join(recall_banks)}"
+                ),
             )
 
         except Exception as e:
