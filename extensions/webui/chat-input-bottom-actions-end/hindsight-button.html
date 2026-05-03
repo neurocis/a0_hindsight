@@ -157,13 +157,15 @@
   .a0-hindsight-toggle-row span { display: grid; gap: .25rem; }
   .a0-hindsight-field { display: grid; gap: .35rem; padding: .7rem 0; border-bottom: 1px solid var(--color-border); }
   .a0-hindsight-field input { width: 100%; border: 1px solid var(--color-border); border-radius: 8px; padding: .55rem .65rem; background: var(--color-input-background, var(--color-bg)); color: var(--color-text); }
-  .a0-hindsight-route-grid { display: grid; gap: .65rem; }
-  .a0-hindsight-route-grid > div { display: grid; gap: .25rem; }
+  .a0-hindsight-route-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem .8rem; align-items: start; }
+  .a0-hindsight-route-grid > div { display: grid; gap: .25rem; min-width: 0; }
+  .a0-hindsight-route-grid > div:nth-last-child(-n+2) { grid-column: span 2; }
   .a0-hindsight-route-grid code, .a0-hindsight-muted code { white-space: normal; word-break: break-word; }
   .a0-hindsight-small-button, .a0-hindsight-save-button { border: 1px solid var(--color-border); border-radius: 8px; padding: .45rem .7rem; background: var(--color-background); color: var(--color-text); cursor: pointer; }
   .a0-hindsight-save-button { background: var(--color-accent, #6c5ce7); color: white; border-color: transparent; }
   .a0-hindsight-small-button:disabled, .a0-hindsight-save-button:disabled { opacity: .55; cursor: not-allowed; }
   @media (max-width: 760px) { .a0-hindsight-content { grid-template-columns: 1fr; } }
+  @media (max-width: 520px) { .a0-hindsight-route-grid { grid-template-columns: 1fr; } .a0-hindsight-route-grid > div:nth-last-child(-n+2) { grid-column: auto; } }
 </style>
 </body>
 </html>
