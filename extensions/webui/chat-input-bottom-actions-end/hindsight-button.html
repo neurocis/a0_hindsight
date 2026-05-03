@@ -6,6 +6,7 @@
 <span
   class="a0-hindsight-tab-anchor"
   x-data
+  x-move-after=".a0-sup-inheritance-tab-anchor"
   x-effect="$store.a0Hindsight?.onContextChanged($store.chats?.selected || '')"
   @keydown.escape.window="$store.a0Hindsight?.close()"
 >
@@ -16,7 +17,16 @@
     title="Hindsight"
     @click.prevent.stop="$store.a0Hindsight.toggle()"
   >
-    <span class="material-symbols-outlined" aria-hidden="true">history</span>
+    <svg class="a0-hindsight-tab-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+      <path d="M9 3.5a3.2 3.2 0 0 0-3.1 4A3.6 3.6 0 0 0 4 13.9 3.4 3.4 0 0 0 8.3 19"></path>
+      <path d="M15 3.5a3.2 3.2 0 0 1 3.1 4A3.6 3.6 0 0 1 20 13.9a3.4 3.4 0 0 1-4.3 5.1"></path>
+      <path d="M9 3.5c1.1 0 2 .9 2 2v13c0 1.2-.9 2-2 2"></path>
+      <path d="M15 3.5c-1.1 0-2 .9-2 2v13c0 1.2.9 2 2 2"></path>
+      <path d="M7.2 9.2c.7-.4 1.5-.5 2.3-.2"></path>
+      <path d="M16.8 9.2c-.7-.4-1.5-.5-2.3-.2"></path>
+      <path d="M8.2 15.5c.7.2 1.3.1 1.8-.3"></path>
+      <path d="M15.8 15.5c-.7.2-1.3.1-1.8-.3"></path>
+    </svg>
     <p>Hindsight</p>
   </button>
 
@@ -125,6 +135,7 @@
 <style>
   .a0-hindsight-tab-anchor { position: relative; display: inline-flex; align-items: stretch; --a0-hindsight-panel-margin: clamp(0.5rem, 1.5vw, 1.25rem); --a0-hindsight-panel-width: calc(100vw - 1rem); --a0-hindsight-panel-max-height: min(640px, 78vh); --a0-hindsight-tab-offset-left: 0px; }
   .a0-hindsight-tab-anchor > .text-button { position: relative; z-index: 10002; }
+  .a0-hindsight-tab-icon { width: 14px; height: 14px; flex: 0 0 14px; display: inline-block; }
   .a0-hindsight-toggle-open { background-color: var(--color-background-hover) !important; border-radius: 0 0 4px 4px; opacity: 1 !important; }
   .a0-hindsight-host-lifted { position: relative; z-index: 10002; overflow: visible !important; }
   .a0-hindsight-compose-lifted { position: relative; z-index: 10002; transform: translateY(calc(-1 * var(--a0-hindsight-panel-lift, 18rem))); transition: transform 180ms ease; will-change: transform; }
