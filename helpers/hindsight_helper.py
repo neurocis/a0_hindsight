@@ -340,7 +340,12 @@ def _sanitize_bank_part(value: Any, fallback: str = "default") -> str:
 
 
 def _get_agent_profile(agent: Any = None, context: Optional["AgentContext"] = None) -> str:
-    """Return the active agent profile key, falling back to agent0."""
+    """Return the stable Agent Zero agent profile key, falling back to agent0.
+
+    This is intentionally the framework profile id used for scoped plugin
+    settings (for example ``agent0``).  It is not necessarily the human-facing
+    agent/chat/context name used for Hindsight bank defaults.
+    """
     try:
         if agent is None and context is not None:
             agent = getattr(context, "agent0", None)
@@ -348,6 +353,70 @@ def _get_agent_profile(agent: Any = None, context: Optional["AgentContext"] = No
         return str(profile or "agent0").strip() or "agent0"
     except Exception:
         return "agent0"
+
+
+def _get_agent_display_name(agent: Any = None, context: Optional["AgentContext"] = None) -> str:
+    """Return the human-facing active agent/context name.
+
+    Agent Zero's stable profile key is often ``agent0`` for many named chat
+    contexts.  Hindsight's default per-agent bank should be recognizable to the
+    user, so prefer the context/chat name such as ``A0_Hindsight``.  Fall back
+    through persisted chat metadata and finally the stable profile key.
+    """
+    try:
+        if agent is None and context is not None:
+            agent = getattr(context, "agent0", None)
+
+        candidates = []
+        if context is not None:
+            candidates.extend([
+                getattr(context, "name", ""),
+                getattr(context, "title", ""),
+            ])
+            data = getattr(context, "data", None) or {}
+            if isinstance(data, dict):
+                candidates.extend([
+                    data.get("sup_name", ""),
+                    data.get("name", ""),
+                    data.get("agent_name", ""),
+                ])
+
+            # In some API/runtime paths, the live context may not have a name
+            # hydrated even though /a0/usr/chats/<ctxid>/chat.json does.
+            try:
+                import json
+                import os
+                ctxid = str(getattr(context, "id", "") or "").strip()
+                if ctxid:
+                    chat_path = os.path.join("/a0/usr/chats", ctxid, "chat.json")
+                    if os.path.isfile(chat_path):
+                        with open(chat_path, "r") as f:
+                            chat_data = json.load(f)
+                        if isinstance(chat_data, dict):
+                            candidates.append(chat_data.get("name", ""))
+            except Exception:
+                pass
+
+        if agent is not None:
+            candidates.extend([
+                getattr(agent, "display_name", ""),
+                getattr(agent, "name", ""),
+                getattr(agent, "agent_name", ""),
+            ])
+
+        for candidate in candidates:
+            text = str(candidate or "").strip()
+            if text:
+                return text
+    except Exception:
+        pass
+    return _get_agent_profile(agent, context)
+
+
+def get_agent_default_bank_id(context: "AgentContext") -> str:
+    """Return the derived default bank for the active named agent/context."""
+    agent0 = getattr(context, "agent0", None)
+    return _sanitize_bank_part(_get_agent_display_name(agent0, context), "agent0")
 
 
 def _get_project_name(context: Optional["AgentContext"]) -> str:
@@ -386,15 +455,16 @@ def get_project_bank_id(context: "AgentContext") -> str:
 def get_agent_bank_id(context: "AgentContext") -> str:
     """Return the active agent's Hindsight bank ID.
 
-    Explicit agent bank ID wins. If blank, default to the active agent profile
-    name exactly enough to be recognizable, sanitized only for safety.
+    Explicit agent bank ID wins. If blank, default to the human-facing
+    context/agent name (for example ``A0_Hindsight``), not the framework's
+    stable profile key (often ``agent0``).
     """
     agent0 = getattr(context, "agent0", None)
     config = _get_plugin_config(agent0)
     explicit_id = str(config.get("hindsight_agent_bank_id", "") or "").strip()
     if explicit_id:
         return explicit_id
-    return _sanitize_bank_part(_get_agent_profile(agent0, context), "agent0")
+    return get_agent_default_bank_id(context)
 
 
 def is_agent_memory_enabled(context: "AgentContext") -> bool:

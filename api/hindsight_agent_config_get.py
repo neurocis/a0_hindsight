@@ -23,6 +23,8 @@ class HindsightAgentConfigGet(ApiHandler):
             agent = getattr(context, "agent0", None)
             project_name = hindsight_helper._get_project_name(context)
             agent_profile = hindsight_helper._get_agent_profile(agent, context)
+            agent_display_name = hindsight_helper._get_agent_display_name(agent, context)
+            agent_default_bank_id = hindsight_helper.get_agent_default_bank_id(context)
 
             agent_settings = plugins.get_plugin_config(
                 "a0_hindsight",
@@ -37,6 +39,8 @@ class HindsightAgentConfigGet(ApiHandler):
                 "ctxid": context.id,
                 "project_name": project_name,
                 "agent_profile": agent_profile,
+                "agent_display_name": agent_display_name,
+                "agent_default_bank_id": agent_default_bank_id,
                 "settings": {
                     "hindsight_agent_memory_enabled": bool(effective.get("hindsight_agent_memory_enabled", False)),
                     "hindsight_agent_bank_id": str(effective.get("hindsight_agent_bank_id", "") or ""),

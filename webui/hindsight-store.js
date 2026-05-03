@@ -23,6 +23,8 @@ export const store = createStore("a0Hindsight", {
   ctxid: "",
   projectName: "",
   agentProfile: "agent0",
+  agentDisplayName: "",
+  agentDefaultBankId: "agent0",
   projectBankId: "",
   agentBankId: "",
   retainBankIds: [],
@@ -321,6 +323,8 @@ export const store = createStore("a0Hindsight", {
       if (!result?.ok) throw new Error(result?.error || "Failed to load Hindsight settings");
       this.projectName = result.project_name || "";
       this.agentProfile = result.agent_profile || "agent0";
+      this.agentDisplayName = result.agent_display_name || this.agentProfile || "agent0";
+      this.agentDefaultBankId = result.agent_default_bank_id || this.sanitizeBankPart(this.agentDisplayName || this.agentProfile || "agent0");
       this.projectBankId = result.project_bank_id || "";
       this.agentBankId = result.agent_bank_id || "";
       this.retainBankIds = result.retain_bank_ids || [];
@@ -345,6 +349,8 @@ export const store = createStore("a0Hindsight", {
       });
       if (!result?.ok) throw new Error(result?.error || "Failed to save Hindsight settings");
       this.settings = cloneSettings(this.draft);
+      this.agentDisplayName = result.agent_display_name || this.agentDisplayName || this.agentProfile || "agent0";
+      this.agentDefaultBankId = result.agent_default_bank_id || this.agentDefaultBankId || this.sanitizeBankPart(this.agentDisplayName || this.agentProfile || "agent0");
       this.agentBankId = result.agent_bank_id || this.previewAgentBank();
       this.retainBankIds = result.retain_bank_ids || this.previewRetainBanks();
       this.recallBankIds = result.recall_bank_ids || this.previewRecallBanks();
@@ -362,7 +368,7 @@ export const store = createStore("a0Hindsight", {
   },
 
   scopeLabel() {
-    return `${this.agentProfile || "agent0"} · ${this.projectName || "default project"}`;
+    return `${this.agentDisplayName || this.agentProfile || "agent0"} · ${this.projectName || "default project"}`;
   },
 
   sanitizeBankPart(value, fallback = "agent0") {
@@ -371,7 +377,7 @@ export const store = createStore("a0Hindsight", {
   },
 
   previewAgentBank() {
-    return (this.draft.hindsight_agent_bank_id || "").trim() || this.sanitizeBankPart(this.agentProfile || "agent0");
+    return (this.draft.hindsight_agent_bank_id || "").trim() || this.agentDefaultBankId || this.sanitizeBankPart(this.agentDisplayName || this.agentProfile || "agent0");
   },
 
   previewRetainBanks() {

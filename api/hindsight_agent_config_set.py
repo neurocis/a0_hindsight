@@ -51,6 +51,8 @@ class HindsightAgentConfigSet(ApiHandler):
                 "ok": True,
                 "ctxid": context.id,
                 "agent_profile": agent_profile,
+                "agent_display_name": hindsight_helper._get_agent_display_name(agent, context),
+                "agent_default_bank_id": hindsight_helper.get_agent_default_bank_id(context),
                 "settings": existing,
                 "agent_bank_id": hindsight_helper.get_agent_bank_id(context),
                 "retain_bank_ids": hindsight_helper.get_retain_bank_ids(context),

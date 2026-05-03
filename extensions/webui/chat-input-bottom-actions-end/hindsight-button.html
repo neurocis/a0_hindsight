@@ -70,9 +70,9 @@
             <input
               type="text"
               x-model="$store.a0Hindsight.draft.hindsight_agent_bank_id"
-              :placeholder="$store.a0Hindsight.agentProfile || 'agent0'"
+              :placeholder="$store.a0Hindsight.agentDefaultBankId || $store.a0Hindsight.agentDisplayName || $store.a0Hindsight.agentProfile || 'agent0'"
             />
-            <small>If blank, defaults to the current agent profile/name.</small>
+            <small>If blank, defaults to the current agent/context name shown in grey.</small>
           </label>
 
           <label class="a0-hindsight-toggle-row">
@@ -92,6 +92,7 @@
 
           <div class="a0-hindsight-route-grid">
             <div><strong>Project</strong><code x-text="$store.a0Hindsight.projectName || 'default'"></code></div>
+            <div><strong>Agent name</strong><code x-text="$store.a0Hindsight.agentDisplayName || $store.a0Hindsight.agentProfile || 'agent0'"></code></div>
             <div><strong>Agent profile</strong><code x-text="$store.a0Hindsight.agentProfile || 'agent0'"></code></div>
             <div><strong>Project bank</strong><code x-text="$store.a0Hindsight.projectBankId"></code></div>
             <div><strong>Agent bank</strong><code x-text="$store.a0Hindsight.previewAgentBank()"></code></div>
