@@ -1,8 +1,0 @@
-{
-  "checked_at": "2026-04-20T02:50:12.133621",
-  "hindsight_client": true,
-  "warnings": [
-    "auto-created by lazy init (hooks.install was not run)"
-  ],
-  "errors": []
-}

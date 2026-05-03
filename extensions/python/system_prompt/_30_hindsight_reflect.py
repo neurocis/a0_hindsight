@@ -5,19 +5,12 @@ into the agent's system prompt.
 """
 
 import asyncio
-import os
-import sys
 from agent import AgentContext
 from helpers.extension import Extension
 from helpers import errors
 
-# Fix import path for hindsight plugin helpers
-# Add /a0 to sys.path so that 'usr.plugins.a0_hindsight' can be resolved
-plugin_base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
-if plugin_base not in sys.path:
-    sys.path.insert(0, plugin_base)
-
 from usr.plugins.a0_hindsight.helpers import hindsight_helper
+
 
 REFLECT_TIMEOUT = 15
 

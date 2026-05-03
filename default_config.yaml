@@ -19,19 +19,8 @@
 #   - hindsight_agent_bank_id: Explicit agent bank name; blank = agent profile
 #   - hindsight_agent_retain_to_project: Also copy agent memories to project bank
 
-# ─── Global Settings ────────────────────────────────────────
-
-# Hindsight Base URL - the server endpoint
-# Also settable via HINDSIGHT_BASE_URL environment variable (takes priority)
-hindsight_base_url: ""
-
-# Bank ID prefix - combined with project name for isolation
+# Bank ID prefix - combined with project/agent context for isolation
 hindsight_bank_prefix: "a0"
-
-# ─── Per-Project Settings ───────────────────────────────────
-
-# Explicit bank ID override (leave blank for auto-derivation: prefix-projectname)
-hindsight_bank_id: ""
 
 # Enable/disable individual Hindsight operations
 hindsight_retain_enabled: true

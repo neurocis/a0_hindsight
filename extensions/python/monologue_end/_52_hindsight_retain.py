@@ -4,43 +4,25 @@ After the core memory plugin memorizes fragments, this extension
 also retains them to Hindsight for semantic enrichment.
 
 Runs at priority _52 (after _50_memorize_fragments and _51_memorize_solutions).
-
-Uses asyncio.create_task() instead of DeferredTask to avoid
-'Timeout context manager should be used inside a task' errors.
-DeferredTask creates a separate background event loop thread,
-which causes asyncio.timeout() (used internally by httpx/aiohttp
-in Python 3.11+) to fail because the HTTP client sessions and
-asyncio timeout contexts are bound to the main loop.
 """
 
-import asyncio
-import os
-import sys
 from helpers import errors, plugins
 from helpers.extension import Extension
 from helpers.dirty_json import DirtyJson
-from helpers.history import output_text as history_output_text
 from agent import LoopData
-
-# Fix import path for hindsight plugin helpers
-# Add /a0 to sys.path so that 'usr.plugins.a0_hindsight' can be resolved
-plugin_base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
-if plugin_base not in sys.path:
-    sys.path.insert(0, plugin_base)
+from helpers.defer import DeferredTask, THREAD_BACKGROUND
 
 from usr.plugins.a0_hindsight.helpers import hindsight_helper
 
+
 class HindsightRetain(Extension):
 
-    async def execute(self, loop_data: LoopData = LoopData(), **kwargs):
+    def execute(self, loop_data: LoopData = LoopData(), **kwargs):
         if not self.agent:
             return
 
         context = self.agent.context
         if not hasattr(context, "agent0"):
-            return
-        # Check if hindsight_client is available before proceeding
-        if not hindsight_helper.is_hindsight_client_available():
             return
 
         if not hindsight_helper.is_configured(context):
@@ -50,66 +32,28 @@ class HindsightRetain(Extension):
         if not config.get("hindsight_retain_enabled", True):
             return
 
-        # Run retention as a fire-and-forget task on the SAME event loop.
-        # Using asyncio.create_task() instead of DeferredTask because:
-        # - DeferredTask creates a separate background event loop thread
-        # - The LLM client (httpx) and Hindsight SDK (aiohttp) use
-        #   asyncio.timeout() internally, which requires being inside a
-        #   proper asyncio Task on the current running loop
-        # - Running on a different loop causes:
-        #   'Timeout context manager should be used inside a task'
+        log_item = self.agent.context.log.log(
+            type="util",
+            heading="Retaining to Hindsight...",
+        )
+
+        # Run retain in background to avoid blocking the agent loop
+        task = DeferredTask(thread_name=THREAD_BACKGROUND)
+        task.start_task(self.retain_to_hindsight, loop_data, log_item)
+
+    async def retain_to_hindsight(self, loop_data: LoopData, log_item, **kwargs):
+        if not self.agent:
+            return
+
+        context = self.agent.context
+
         try:
-            asyncio.create_task(
-                self._retain_to_hindsight(
-                    self.agent,
-                    context,
-                    loop_data,
-                    config,
-                )
-            )
-        except RuntimeError:
-            # No running event loop - should not happen in extension context,
-            # but handle gracefully
-            pass
+            # Get the conversation history to extract what should be retained
+            system = self.agent.read_prompt("hindsight.retain_extract.sys.md")
+            msgs_text = self.agent.concat_messages(self.agent.history)
 
-    @staticmethod
-    async def _retain_to_hindsight(agent, context, loop_data, config):
-        """Background task: extract knowledge and store in Hindsight.
-        
-        Only processes NEW messages since the last retain cycle to avoid
-        O(N²) token growth and duplicate memories (GitHub #2 Bug 2).
-        """
-        try:
-            log_item = context.log.log(
-                type="util",
-                heading="Retaining to Hindsight...",
-            )
-
-            # Delta tracking: only extract from messages added since last retain
-            if not hasattr(context, '_hindsight'):
-                context._hindsight = {}
-            last_idx = context._hindsight.get('last_retain_idx', 0)
-            # Get flattened output messages via History's public API
-            # History has no .messages attribute — messages are spread across
-            # .bulks, .topics, and .current. The .output() method returns the
-            # canonical flat list[OutputMessage].
-            all_output = agent.history.output()
-            if last_idx >= len(all_output):
-                log_item.update(heading="No new messages to retain to Hindsight.")
-                return
-            
-            new_output = all_output[last_idx:]
-            if not new_output:
-                log_item.update(heading="No new messages to retain to Hindsight.")
-                return
-
-            # Format new messages as text using the history module's output_text()
-            # Note: agent.concat_messages() ignores its argument and always returns
-            # the full history, so we format the delta directly
-            system = agent.read_prompt("hindsight.retain_extract.sys.md")
-            msgs_text = history_output_text(new_output)
             # Call utility LLM to extract key information from conversation
-            memories_json = await agent.call_utility_model(
+            memories_json = await self.agent.call_utility_model(
                 system=system,
                 message=msgs_text,
                 background=True,
@@ -178,12 +122,9 @@ class HindsightRetain(Extension):
             )
 
         except Exception as e:
-            try:
-                err = errors.format_error(e)
-                context.log.log(
-                    type="warning",
-                    heading="Hindsight retain background error",
-                    content=err,
-                )
-            except Exception:
-                pass
+            err = errors.format_error(e)
+            self.agent.context.log.log(
+                type="warning",
+                heading="Hindsight retain extension error",
+                content=err,
+            )

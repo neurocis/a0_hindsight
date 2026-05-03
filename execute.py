@@ -37,41 +37,16 @@ def main():
     # --- Step 3: Check configuration ---
     print("[3/3] Checking configuration...")
     import os
-    import json
     
-    # First check environment variable
     base_url = os.environ.get("HINDSIGHT_BASE_URL", "").strip()
-    
-    # If not in env, try plugin config file (fallback)
-    if not base_url:
-        try:
-            with open("/a0/usr/plugins/a0_hindsight/config.json") as f:
-                config = json.load(f)
-                base_url = config.get("hindsight_base_url", "").strip()
-                if base_url:
-                    print("  ℹ HINDSIGHT_BASE_URL loaded from plugin config.json (fallback)")
-        except Exception:
-            pass
-    
     if base_url:
         print(f"  ✓ HINDSIGHT_BASE_URL found: {base_url}")
     else:
         print("  ⚠ HINDSIGHT_BASE_URL not set.")
         print("    Set it as an environment variable before starting Agent Zero.")
         print("    Example: export HINDSIGHT_BASE_URL='http://localhost:8888'")
-        print("    OR set 'hindsight_base_url' in /a0/usr/plugins/a0_hindsight/config.json")
 
     api_key = os.environ.get("HINDSIGHT_API_KEY", "").strip()
-    
-    # If not in env, try plugin config file (fallback)
-    if not api_key:
-        try:
-            with open("/a0/usr/plugins/a0_hindsight/config.json") as f:
-                config = json.load(f)
-                api_key = config.get("hindsight_api_key", "").strip()
-        except Exception:
-            pass
-    
     if api_key:
         masked = api_key[:8] + "..." + api_key[-4:] if len(api_key) > 12 else "***"
         print(f"  ✓ HINDSIGHT_API_KEY found: {masked}")

@@ -7,43 +7,26 @@ recall, and reflect operations for persistent memory augmentation.
 Uses async variants (aretain, arecall, areflect) since Agent Zero
 extensions run inside an async event loop.
 """
+
 import os
-import sys
 import time
 from typing import Optional, Dict, Any, TYPE_CHECKING, List
 if TYPE_CHECKING:
     from agent import AgentContext
 
-# Add vendor directory to sys.path BEFORE importing hindsight_client
-# This allows the plugin to use hindsight-client from its own vendor/
-# directory instead of relying on system-wide pip installation (which is
-# ephemeral in Docker and lost on container restart).
-plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-vendor_dir = os.path.join(plugin_dir, "vendor")
-if vendor_dir not in sys.path:
-    sys.path.insert(0, vendor_dir)
-
 try:
     from hindsight_client import Hindsight
     HINDSIGHT_AVAILABLE = True
 except ImportError:
-    # Do NOT auto-install at module import time — it blocks the main thread
-    # for up to 30s (GitHub #2 Bug 5). Let the init extension handle
-    # installation asynchronously instead.
-    import logging as _logging
-    _logging.getLogger(__name__).info(
-        "[Hindsight] hindsight_client not available at import time — "
-        "init extension will handle installation if needed."
-    )
     HINDSIGHT_AVAILABLE = False
     Hindsight = None  # type: ignore[assignment,misc]
 
 # Module-level caches
+_client_cache: Dict[str, Any] = {}
 _reflect_cache: Dict[str, tuple] = {}  # bank_id -> (timestamp, content)
 
 # Default configuration values
 _DEFAULTS: Dict[str, Any] = {
-    "hindsight_bank_id": "",  # Explicit bank ID override; empty = use derived format (prefix-projectname)
     "hindsight_bank_prefix": "a0",
     "hindsight_retain_enabled": True,
     "hindsight_recall_enabled": True,
@@ -277,6 +260,7 @@ def get_base_url(context: Optional["AgentContext"] = None, agent: Any = None) ->
         config = _get_plugin_config(agent)
         url = config.get("hindsight_base_url", "").strip()
         if url:
+            _log(context, "Using HINDSIGHT_BASE_URL from plugin config (legacy). Consider using environment variable instead.", "warning")
             return url
     except Exception as e:
         _log(context, f"Error reading plugin config: {e}", "debug")
@@ -294,8 +278,7 @@ def is_configured(context: Optional["AgentContext"] = None) -> bool:
     """Check if Hindsight SDK is available and base URL is set."""
     if not is_hindsight_client_available():
         return False
-    agent = getattr(context, "agent0", None) if context else None
-    return bool(get_base_url(context, agent))
+    return bool(get_base_url(context))
 
 
 def get_client(context: Optional["AgentContext"] = None) -> Optional[Any]:
@@ -307,19 +290,22 @@ def get_client(context: Optional["AgentContext"] = None) -> Optional[Any]:
     if not is_hindsight_client_available():
         return None
 
-    agent = getattr(context, "agent0", None) if context else None
-    base_url = get_base_url(context, agent)
+    base_url = get_base_url(context)
     if not base_url:
-        print(f"[HINDSIGHT DEBUG] get_client(): base_url is None. agent={agent is not None}, env={bool(os.environ.get('HINDSIGHT_BASE_URL'))}")
         return None
 
     api_key = get_api_key(context)
+
+    cache_key = f"{base_url}:{api_key or 'none'}"
+    if cache_key in _client_cache:
+        return _client_cache[cache_key]
 
     try:
         kwargs: Dict[str, Any] = {"base_url": base_url}
         if api_key:
             kwargs["api_key"] = api_key
         client = Hindsight(**kwargs)
+        _client_cache[cache_key] = client
         _log(context, f"Connected to Hindsight at: {base_url}", "util")
         return client
     except Exception as e:
@@ -606,7 +592,7 @@ async def retain_memory(context: "AgentContext", content: str, metadata: Optiona
         return False
 
     agent0 = getattr(context, "agent0", None)
-    config = _get_plugin_config(agent0)
+    config = _get_plugin_config(agent0) if agent0 else {}
     if not config.get("hindsight_retain_enabled", True):
         return False
 
@@ -647,7 +633,7 @@ async def recall_memories(context: "AgentContext", query: str) -> Optional[str]:
         return None
 
     agent0 = getattr(context, "agent0", None)
-    config = _get_plugin_config(agent0)
+    config = _get_plugin_config(agent0) if agent0 else {}
     if not config.get("hindsight_recall_enabled", True):
         return None
 
@@ -698,7 +684,7 @@ async def reflect_context(context: "AgentContext", query: str) -> Optional[str]:
         return None
 
     agent0 = getattr(context, "agent0", None)
-    config = _get_plugin_config(agent0)
+    config = _get_plugin_config(agent0) if agent0 else {}
     if not config.get("hindsight_reflect_enabled", True):
         return None
 
@@ -768,3 +754,4 @@ def cleanup(context: Optional["AgentContext"] = None) -> None:
         clear_cache(bank_id)
     else:
         clear_cache()
+        _client_cache.clear()
