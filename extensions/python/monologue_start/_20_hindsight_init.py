@@ -48,7 +48,7 @@ class HindsightInit(Extension):
 
             client = hindsight_helper.get_client(context)
             if client:
-                bank_id = hindsight_helper.get_bank_id(context)
+                bank_id = hindsight_helper.get_bank_id(context, agent=self.agent)
                 hindsight_helper._log(
                     context,
                     f"Integration enabled for bank: {bank_id}",

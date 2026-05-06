@@ -299,19 +299,24 @@ def get_client(context: Optional["AgentContext"] = None) -> Optional[Any]:
         return None
 
 
-def get_bank_id(context: "AgentContext") -> str:
+def get_bank_id(context: "AgentContext", agent: Any = None) -> str:
     """Derive a Hindsight bank ID from the agent context.
 
     Uses the bank prefix + project name (if active) for memory isolation.
     Always uses the actual project name when a project is active,
     even if the project has no per-project settings defined.
     Only falls back to prefix + 'default' when no project is active at all.
-    
+
     If hindsight_bank_id is explicitly set in config, that takes priority.
+
+    The optional `agent` argument lets the caller resolve config against the
+    *current* running agent (e.g. a subordinate with its own profile) instead
+    of always defaulting to context.agent0. This is what makes per-profile
+    bank/prefix overrides actually apply to subordinates (Option 2 fix).
     """
-    agent0 = getattr(context, "agent0", None)
-    config = _get_plugin_config(agent0)
-    
+    agent_for_cfg = agent if agent is not None else getattr(context, "agent0", None)
+    config = _get_plugin_config(agent_for_cfg)
+
     # Explicit override takes priority
     explicit_id = config.get("hindsight_bank_id", "").strip()
     if explicit_id:
@@ -342,13 +347,18 @@ def get_bank_id(context: "AgentContext") -> str:
     return f"{prefix}-default"
 
 
-async def retain_memory(context: "AgentContext", content: str, metadata: Optional[Dict[str, str]] = None) -> bool:
-    """Store a memory in Hindsight via async retain."""
+async def retain_memory(context: "AgentContext", content: str, metadata: Optional[Dict[str, str]] = None, agent: Any = None) -> bool:
+    """Store a memory in Hindsight via async retain.
+
+    Pass `agent` (e.g. self.agent from an extension) to resolve config and
+    bank_id against that agent's profile instead of context.agent0. This
+    makes per-profile bank/prefix/budget overrides apply to subordinates.
+    """
     if not is_configured(context):
         return False
 
-    agent0 = getattr(context, "agent0", None)
-    config = _get_plugin_config(agent0)
+    agent_for_cfg = agent if agent is not None else getattr(context, "agent0", None)
+    config = _get_plugin_config(agent_for_cfg)
     if not config.get("hindsight_retain_enabled", True):
         return False
 
@@ -356,7 +366,7 @@ async def retain_memory(context: "AgentContext", content: str, metadata: Optiona
     if not client:
         return False
 
-    bank_id = get_bank_id(context)
+    bank_id = get_bank_id(context, agent=agent_for_cfg)
 
     try:
         kwargs: Dict[str, Any] = {
@@ -376,20 +386,24 @@ async def retain_memory(context: "AgentContext", content: str, metadata: Optiona
         return False
 
 
-async def recall_memories(context: "AgentContext", query: str) -> Optional[str]:
-    """Search Hindsight memories via async recall."""
+async def recall_memories(context: "AgentContext", query: str, agent: Any = None) -> Optional[str]:
+    """Search Hindsight memories via async recall.
+
+    Pass `agent` to resolve config and bank_id against the calling agent's
+    profile (lets subordinates use per-profile bank/prefix overrides).
+    """
     if not is_configured(context):
         return None
 
-    agent0 = getattr(context, "agent0", None)
-    config = _get_plugin_config(agent0)
+    agent_for_cfg = agent if agent is not None else getattr(context, "agent0", None)
+    config = _get_plugin_config(agent_for_cfg)
     if not config.get("hindsight_recall_enabled", True):
         return None
 
     client = get_client(context)
     if not client:
         return None
-    bank_id = get_bank_id(context)
+    bank_id = get_bank_id(context, agent=agent_for_cfg)
 
     try:
         # Validate and truncate query before sending
@@ -439,17 +453,21 @@ async def recall_memories(context: "AgentContext", query: str) -> Optional[str]:
         return None
 
 
-async def reflect_context(context: "AgentContext", query: str) -> Optional[str]:
-    """Generate disposition-aware context from Hindsight via async reflect."""
+async def reflect_context(context: "AgentContext", query: str, agent: Any = None) -> Optional[str]:
+    """Generate disposition-aware context from Hindsight via async reflect.
+
+    Pass `agent` to resolve config and bank_id against the calling agent's
+    profile (lets subordinates use per-profile bank/prefix overrides).
+    """
     if not is_configured(context):
         return None
 
-    agent0 = getattr(context, "agent0", None)
-    config = _get_plugin_config(agent0)
+    agent_for_cfg = agent if agent is not None else getattr(context, "agent0", None)
+    config = _get_plugin_config(agent_for_cfg)
     if not config.get("hindsight_reflect_enabled", True):
         return None
 
-    bank_id = get_bank_id(context)
+    bank_id = get_bank_id(context, agent=agent_for_cfg)
 
     # Check cache
     cache_key = f"{bank_id}:{getattr(context, 'id', 'default')}"

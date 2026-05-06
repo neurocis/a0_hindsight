@@ -47,7 +47,7 @@ class HindsightReflect(Extension):
             query = f"Based on the current conversation, what relevant context should I know?\n\n{history_text}"
 
             reflect_result = await asyncio.wait_for(
-                hindsight_helper.reflect_context(context, query),
+                hindsight_helper.reflect_context(context, query, agent=self.agent),
                 timeout=REFLECT_TIMEOUT,
             )
 

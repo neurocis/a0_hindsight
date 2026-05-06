@@ -156,13 +156,14 @@ class HindsightRetain(Extension):
                 success = await hindsight_helper.retain_memory(
                     context=context,
                     content=content,
+                    agent=agent,
                 )
                 if success:
                     retained += 1
                 else:
                     failed += 1
 
-            bank_id = hindsight_helper.get_bank_id(context)
+            bank_id = hindsight_helper.get_bank_id(context, agent=agent)
             
             # Update delta tracking index after successful retention
             context._hindsight['last_retain_idx'] = len(all_output)
