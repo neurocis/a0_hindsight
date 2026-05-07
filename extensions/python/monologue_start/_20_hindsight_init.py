@@ -20,6 +20,8 @@ if plugin_base not in sys.path:
     sys.path.insert(0, plugin_base)
 
 from usr.plugins.a0_hindsight.helpers import hindsight_helper
+import importlib
+importlib.reload(hindsight_helper)  # ensure fresh signatures across hot-reloads
 
 # Track whether auto-install has been attempted this process lifetime
 _install_attempted = False
