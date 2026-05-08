@@ -133,55 +133,52 @@ def _get_plugin_config(agent: Any) -> Dict[str, Any]:
 
 def is_hindsight_client_available() -> bool:
     """Runtime check for hindsight_client availability.
-    
-    Fast path: reads .dependency_status.json file created by hooks.py install().
-    Slow path: performs live import check if status file missing (self-healing).
-    
-    Returns True if hindsight_client is available, False otherwise.
+
+    Always performs a live import check. The cached .dependency_status.json
+    file is only an optimization/diagnostic artifact and cannot be trusted as
+    the source of truth because Docker/venv updates can remove packages while
+    leaving the status file behind. Trusting a stale positive status causes the
+    init extension to skip auto-install, leaving Hindsight disabled and no bank
+    created for the active project.
+
+    Returns True if hindsight_client is importable in the current Python
+    environment, False otherwise.
     """
     import os
     import json
-    
+
     plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     status_file = os.path.join(plugin_dir, ".dependency_status.json")
-    
-    # Fast path: check cached status file from installation
-    if os.path.isfile(status_file):
-        try:
-            with open(status_file, "r") as f:
-                status = json.load(f)
-                if status.get("hindsight_client"):
-                    return True
-        except Exception:
-            pass
-    
-    # Slow path: live import check (status file missing or invalid)
-    # IMPORTANT: Don't trust the module-level HINDSIGHT_AVAILABLE variable
-    # because it was set at module load time and may be stale (cached from a
-    # previous Python session where hindsight_client was installed).
-    # Instead, perform a LIVE import check to verify the package is actually
-    # available in the current Python environment.
+
+    global HINDSIGHT_AVAILABLE, Hindsight
     try:
-        from hindsight_client import Hindsight  # noqa: F401
+        from hindsight_client import Hindsight as _LiveHindsight
+        Hindsight = _LiveHindsight
+        HINDSIGHT_AVAILABLE = True
         available = True
     except ImportError:
+        Hindsight = None  # type: ignore[assignment,misc]
+        HINDSIGHT_AVAILABLE = False
         available = False
-    
-    if available:
-        # Self-heal: create the status file so future checks are instant
-        try:
-            status_data = {
-                "checked_at": _get_timestamp(),
-                "hindsight_client": True,
-                "warnings": ["auto-created by lazy init (hooks.install was not run)"],
-                "errors": [],
-            }
-            os.makedirs(plugin_dir, exist_ok=True)
-            with open(status_file, "w") as f:
-                json.dump(status_data, f, indent=2)
-        except Exception:
-            pass  # Status file creation failed, but hindsight_client is available
-    
+
+    # Keep the status file in sync with the live import result.
+    try:
+        status_data = {
+            "checked_at": _get_timestamp(),
+            "hindsight_client": available,
+            "warnings": [] if available else [
+                "live import failed; dependency status cache corrected"
+            ],
+            "errors": [] if available else [
+                "hindsight_client is not importable in the current Python environment"
+            ],
+        }
+        os.makedirs(plugin_dir, exist_ok=True)
+        with open(status_file, "w") as f:
+            json.dump(status_data, f, indent=2)
+    except Exception:
+        pass
+
     return available
 
 
