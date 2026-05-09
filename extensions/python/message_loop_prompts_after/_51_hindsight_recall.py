@@ -86,6 +86,15 @@ class HindsightRecall(Extension):
 
             recall_result = await hindsight_helper.recall_memories(context, query, agent=self.agent)
 
+            # Compute observability metrics for verbose mode
+            results_count = 0
+            if recall_result and recall_result.strip():
+                # Approximate result count: count non-empty lines, fallback to 1
+                lines = [ln for ln in recall_result.splitlines() if ln.strip()]
+                results_count = len(lines) if lines else 1
+
+            injected_into_prompt = False
+
             if recall_result and recall_result.strip():
                 log_item.update(
                     heading="Hindsight memories found",
@@ -99,10 +108,29 @@ class HindsightRecall(Extension):
                     hindsight_memories=recall_result,
                 )
                 extras["hindsight_memories"] = hindsight_prompt
+                injected_into_prompt = True
             else:
                 log_item.update(heading="No Hindsight memories found")
                 # Clear stale memories when recall finds nothing (GitHub #2 Bug 3)
                 loop_data.extras_persistent.pop("hindsight_memories", None)
+
+            # Emit verbose feedback event (no-op when verbose mode disabled)
+            verbose_event = hindsight_helper.emit_verbose_event(
+                context,
+                "recall",
+                {
+                    "results_count": results_count,
+                    "injected_into_prompt": injected_into_prompt,
+                    "success": True,
+                },
+                agent=self.agent,
+            )
+            if verbose_event and hindsight_helper.should_emit_verbose_to_prompt(self.agent):
+                loop_data.extras_persistent["hindsight_verbose"] = (
+                    hindsight_helper.format_verbose_event(verbose_event)
+                )
+            else:
+                loop_data.extras_persistent.pop("hindsight_verbose", None)
 
         except asyncio.TimeoutError:
             log_item.update(heading="Hindsight recall timed out")

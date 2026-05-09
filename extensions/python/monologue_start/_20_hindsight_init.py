@@ -44,11 +44,28 @@ class HindsightInit(Extension):
                 _install_attempted = True
                 await self._async_auto_install(context)
 
+            client_available = hindsight_helper.is_hindsight_client_available()
+            configured = hindsight_helper.is_configured(context)
+
             # Step 2: Initialize Hindsight client if configured
-            if not hindsight_helper.is_configured(context):
+            if not configured:
+                # Still emit a verbose init event so operators can see why
+                # Hindsight is silent (e.g. unconfigured base URL).
+                hindsight_helper.emit_verbose_event(
+                    context,
+                    "init",
+                    {
+                        "client_available": client_available,
+                        "configured": False,
+                        "enabled": False,
+                        "success": False,
+                    },
+                    agent=self.agent,
+                )
                 return
 
             client = hindsight_helper.get_client(context)
+            bank_id = None
             if client:
                 bank_id = hindsight_helper.get_bank_id(context, agent=self.agent)
                 hindsight_helper._log(
@@ -61,8 +78,34 @@ class HindsightInit(Extension):
                     context._hindsight = {}
                 context._hindsight["enabled"] = True
                 context._hindsight["bank_id"] = bank_id
+
+            # Emit verbose init event (no-op when verbose mode disabled)
+            hindsight_helper.emit_verbose_event(
+                context,
+                "init",
+                {
+                    "bank_id": bank_id,
+                    "client_available": client_available,
+                    "configured": configured,
+                    "enabled": bool(client),
+                    "success": bool(client),
+                },
+                agent=self.agent,
+            )
         except Exception as e:
             hindsight_helper._log(context, f"Init error: {e}", "error")
+            try:
+                hindsight_helper.emit_verbose_event(
+                    context,
+                    "init",
+                    {
+                        "success": False,
+                        "error": str(e),
+                    },
+                    agent=self.agent,
+                )
+            except Exception:
+                pass
 
     @staticmethod
     async def _async_auto_install(context: AgentContext) -> None:

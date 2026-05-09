@@ -53,12 +53,30 @@ class HindsightReflect(Extension):
                 timeout=REFLECT_TIMEOUT,
             )
 
+            injected_into_prompt = False
             if reflect_result and reflect_result.strip():
                 prompt = self.agent.read_prompt(
                     "hindsight.reflect.md",
                     hindsight_context=reflect_result,
                 )
                 system_prompt.append(prompt)
+                injected_into_prompt = True
+
+            # Emit verbose feedback event (no-op when verbose mode disabled)
+            verbose_event = hindsight_helper.emit_verbose_event(
+                context,
+                "reflect",
+                {
+                    "result_present": bool(reflect_result and reflect_result.strip()),
+                    "injected_into_prompt": injected_into_prompt,
+                    "success": True,
+                },
+                agent=self.agent,
+            )
+            if verbose_event and hindsight_helper.should_emit_verbose_to_prompt(self.agent):
+                system_prompt.append(
+                    hindsight_helper.format_verbose_event(verbose_event)
+                )
 
         except asyncio.TimeoutError:
             pass  # Silently skip on timeout

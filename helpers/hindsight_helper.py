@@ -54,6 +54,17 @@ _DEFAULTS: Dict[str, Any] = {
     "hindsight_reflect_max_tokens": 500,
     "hindsight_cache_ttl": 120,
     "hindsight_debug": False,
+    # ── Verbose feedback mode (disabled by default) ─────────
+    # When enabled, Hindsight extensions emit structured events for
+    # init/recall/retain/reflect operations so users can observe what
+    # the plugin is doing, similar to FAISS-derived memory sections.
+    "hindsight_verbose": False,
+    "hindsight_verbose_include_bank_id": True,
+    "hindsight_verbose_include_recall_count": True,
+    "hindsight_verbose_include_retain_status": True,
+    "hindsight_verbose_include_prompt_injection_status": True,
+    "hindsight_verbose_emit_to_prompt": True,
+    "hindsight_verbose_emit_to_log": True,
 }
 
 
@@ -509,6 +520,134 @@ async def reflect_context(context: "AgentContext", query: str, agent: Any = None
     except Exception as e:
         _log(context, f"Reflect error: {e}", "error")
         return None
+
+
+# ─── Verbose Feedback Helpers ───────────────────────────────
+#
+# Optional structured feedback for Hindsight operations. Disabled by
+# default; enabled via the hindsight_verbose plugin config flag.
+# Designed to give FAISS-style observability (recall counts, retain
+# success, bank IDs) without polluting normal conversations.
+
+
+def _verbose_options(agent: Any) -> Dict[str, Any]:
+    """Resolve the verbose-mode option set for the calling agent."""
+    cfg = _get_plugin_config(agent)
+    return {
+        "enabled": bool(cfg.get("hindsight_verbose", False)),
+        "include_bank_id": bool(cfg.get("hindsight_verbose_include_bank_id", True)),
+        "include_recall_count": bool(cfg.get("hindsight_verbose_include_recall_count", True)),
+        "include_retain_status": bool(cfg.get("hindsight_verbose_include_retain_status", True)),
+        "include_prompt_injection_status": bool(
+            cfg.get("hindsight_verbose_include_prompt_injection_status", True)
+        ),
+        "emit_to_prompt": bool(cfg.get("hindsight_verbose_emit_to_prompt", True)),
+        "emit_to_log": bool(cfg.get("hindsight_verbose_emit_to_log", True)),
+    }
+
+
+def is_verbose_enabled(context: Optional["AgentContext"] = None, agent: Any = None) -> bool:
+    """Return True when the verbose feedback mode is enabled for this agent."""
+    agent_for_cfg = agent if agent is not None else (
+        getattr(context, "agent0", None) if context else None
+    )
+    return _verbose_options(agent_for_cfg)["enabled"]
+
+
+def build_verbose_event(
+    context: Optional["AgentContext"],
+    event: str,
+    payload: Optional[Dict[str, Any]] = None,
+    agent: Any = None,
+) -> Dict[str, Any]:
+    """Construct a structured Hindsight verbose event dict.
+
+    Honors include_* options so each field is only present when the
+    operator wants it. Always sets `source` and `event`.
+    """
+    payload = dict(payload or {})
+    agent_for_cfg = agent if agent is not None else (
+        getattr(context, "agent0", None) if context else None
+    )
+    options = _verbose_options(agent_for_cfg)
+
+    data: Dict[str, Any] = {
+        "source": "hindsight",
+        "event": event,
+    }
+
+    if options["include_bank_id"]:
+        bank_id = payload.pop("bank_id", None)
+        if bank_id is None and context is not None:
+            try:
+                bank_id = get_bank_id(context, agent=agent_for_cfg)
+            except Exception:
+                bank_id = None
+        if bank_id:
+            data["bank_id"] = bank_id
+    else:
+        payload.pop("bank_id", None)
+
+    if not options["include_recall_count"]:
+        payload.pop("results_count", None)
+    if not options["include_retain_status"]:
+        payload.pop("items_count", None)
+        # `success` is still useful for non-retain events; only strip on retain
+        if event == "retain":
+            payload.pop("success", None)
+    if not options["include_prompt_injection_status"]:
+        payload.pop("injected_into_prompt", None)
+
+    data.update(payload)
+    return data
+
+
+def format_verbose_event(event: Dict[str, Any]) -> str:
+    """Render a verbose event dict as a `# Hindsight Verbose` markdown block."""
+    lines = ["# Hindsight Verbose"]
+    for key, value in event.items():
+        lines.append(f"- {key}: {value}")
+    return "\n".join(lines)
+
+
+def emit_verbose_event(
+    context: Optional["AgentContext"],
+    event: str,
+    payload: Optional[Dict[str, Any]] = None,
+    agent: Any = None,
+) -> Optional[Dict[str, Any]]:
+    """Build, log, and return a verbose event when verbose mode is enabled.
+
+    Returns the event dict on success, or None if verbose mode is disabled.
+    Callers that want to inject the event into prompt text should check
+    `_verbose_options(agent)["emit_to_prompt"]` and call
+    `format_verbose_event(...)` themselves.
+    """
+    agent_for_cfg = agent if agent is not None else (
+        getattr(context, "agent0", None) if context else None
+    )
+    options = _verbose_options(agent_for_cfg)
+    if not options["enabled"]:
+        return None
+
+    verbose_event = build_verbose_event(context, event, payload=payload, agent=agent_for_cfg)
+
+    if options["emit_to_log"]:
+        try:
+            _log(context, f"verbose: {verbose_event}", "util")
+        except Exception:
+            try:
+                print(f"[Hindsight verbose] {verbose_event}")
+            except Exception:
+                pass
+
+    return verbose_event
+
+
+def should_emit_verbose_to_prompt(agent: Any = None) -> bool:
+    """Convenience predicate for extensions deciding whether to inject prompt text."""
+    options = _verbose_options(agent)
+    return options["enabled"] and options["emit_to_prompt"]
 
 
 def clear_cache(bank_id: Optional[str] = None) -> None:

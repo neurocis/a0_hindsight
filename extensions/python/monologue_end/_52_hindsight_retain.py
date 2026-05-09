@@ -175,6 +175,20 @@ class HindsightRetain(Extension):
                 content=f"Retained: {retained}, Failed: {failed}, New msgs processed: {len(new_output)}",
             )
 
+            # Emit verbose feedback event (no-op when verbose mode disabled)
+            hindsight_helper.emit_verbose_event(
+                context,
+                "retain",
+                {
+                    "bank_id": bank_id,
+                    "items_count": retained,
+                    "failed_count": failed,
+                    "new_messages_processed": len(new_output),
+                    "success": failed == 0 and retained > 0,
+                },
+                agent=agent,
+            )
+
         except Exception as e:
             try:
                 err = errors.format_error(e)
